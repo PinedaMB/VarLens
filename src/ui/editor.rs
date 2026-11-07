@@ -9,6 +9,7 @@ pub struct EditorView {
     buffer: sourceview5::Buffer,
 }
 
+#[allow(dead_code)]
 impl EditorView {
     /// Creates a new configured code editor view.
     pub fn new(language_id: Option<&str>) -> Self {

@@ -19,6 +19,7 @@ pub struct DiffView {
     last_summary: Rc<Cell<Option<DiffSummary>>>,
 }
 
+#[allow(dead_code)]
 impl DiffView {
     pub fn new() -> Self {
         let left_editor = EditorView::new(Some("json"));

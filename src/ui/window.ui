@@ -1,0 +1,876 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+  <requires lib="GtkSource" version="5"/>
+
+  <!-- Acciones y Menú Principal -->
+  <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Cargar ejemplo var_dump</attribute>
+        <attribute name="action">win.sample-vardump</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Cargar ejemplo JSON</attribute>
+        <attribute name="action">win.sample-json</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Cargar ejemplo Diff</attribute>
+        <attribute name="action">win.sample-diff</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Atajos del teclado</attribute>
+        <attribute name="action">win.show-help-overlay</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Acerca de VarDiff</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+    </section>
+  </menu>
+
+  <template class="VarDiffWindow" parent="AdwApplicationWindow">
+    <property name="title" translatable="yes">VarDiff</property>
+    <property name="default-width">1200</property>
+    <property name="default-height">780</property>
+    <property name="content">
+      <object class="AdwToolbarView">
+        <!-- Barra de herramientas superior -->
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <!-- Título centralizado con selector de vistas -->
+            <property name="title-widget">
+              <object class="AdwViewSwitcher">
+                <property name="stack">main_stack</property>
+                <property name="policy">wide</property>
+              </object>
+            </property>
+
+            <!-- Acciones a la izquierda -->
+            <child type="start">
+              <object class="GtkBox">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">8</property>
+                <child>
+                  <object class="GtkButton" id="btn_open">
+                    <property name="icon-name">document-open-symbolic</property>
+                    <property name="label" translatable="yes">Abrir</property>
+                    <property name="tooltip-text" translatable="yes">Abrir archivo (Ctrl+O)</property>
+                    <property name="action-name">win.open-file</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkSeparator">
+                    <property name="orientation">vertical</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">VarDiff</property>
+                    <style>
+                      <class name="heading"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">v1.2.0</property>
+                    <style>
+                      <class name="badge-pill"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+            <!-- Acciones a la derecha -->
+            <child type="end">
+              <object class="GtkMenuButton">
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="menu-model">primary_menu</property>
+                <property name="tooltip-text" translatable="yes">Menú principal</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <!-- Contenido principal apilado -->
+        <property name="content">
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="vexpand">true</property>
+            <property name="hexpand">true</property>
+
+            <child>
+              <object class="AdwViewStack" id="main_stack">
+                <property name="vexpand">true</property>
+                <property name="hexpand">true</property>
+
+                <!-- ========================================== -->
+                <!-- PÁGINA 1: COMPARADOR (DIFF VIEW)          -->
+                <!-- ========================================== -->
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">diff_page</property>
+                    <property name="title" translatable="yes">Comparador</property>
+                    <property name="icon-name">view-dual-symbolic</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+
+                        <!-- Sub-Barra de Acciones Rápidas del Diff -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">10</property>
+                            <style>
+                              <class name="sub-toolbar"/>
+                            </style>
+
+                            <!-- Navegación de diferencias -->
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <style>
+                                  <class name="linked"/>
+                                </style>
+                                <child>
+                                  <object class="GtkButton" id="btn_diff_prev">
+                                    <property name="icon-name">go-up-symbolic</property>
+                                    <property name="label" translatable="yes">Anterior</property>
+                                    <property name="tooltip-text" translatable="yes">Diferencia anterior (Ctrl+[)</property>
+                                    <property name="action-name">win.diff-prev</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="btn_diff_next">
+                                    <property name="icon-name">go-down-symbolic</property>
+                                    <property name="label" translatable="yes">Siguiente</property>
+                                    <property name="tooltip-text" translatable="yes">Siguiente diferencia (Ctrl+])</property>
+                                    <property name="action-name">win.diff-next</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+
+                            <!-- Badge Contador de Cambios -->
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_count">
+                                <property name="label">2 diferencias encontradas</property>
+                                <style>
+                                  <class name="badge-pill"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkSeparator">
+                                <property name="orientation">vertical</property>
+                              </object>
+                            </child>
+
+                            <!-- Acción primaria: Comparar -->
+                            <child>
+                              <object class="GtkButton" id="btn_run_diff">
+                                <property name="label" translatable="yes">Comparar</property>
+                                <property name="icon-name">view-refresh-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Recalcular diferencias</property>
+                                <property name="action-name">win.compute-diff</property>
+                                <style>
+                                  <class name="suggested-action"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <!-- Acción secundaria: Limpiar -->
+                            <child>
+                              <object class="GtkButton" id="btn_clear_diff">
+                                <property name="label" translatable="yes">Limpiar</property>
+                                <property name="icon-name">edit-clear-all-symbolic</property>
+                                <property name="action-name">win.clear-diff</property>
+                                <style>
+                                  <class name="flat"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <!-- Herramientas derechas: Detector & Ignorar espacios -->
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <property name="spacing">12</property>
+                                <property name="hexpand">true</property>
+                                <property name="halign">end</property>
+
+                                <child>
+                                  <object class="GtkLabel" id="lbl_detect_mode">
+                                    <property name="label">Detectar: JSON / PHP var_dump</property>
+                                    <style>
+                                      <class name="badge-pill"/>
+                                    </style>
+                                  </object>
+                                </child>
+
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">horizontal</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkSwitch" id="sw_ignore_whitespace">
+                                        <property name="valign">center</property>
+                                        <property name="active">false</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Ignorar espacios</property>
+                                        <style>
+                                          <class name="caption"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Paneles lado a lado -->
+                        <child>
+                          <object class="GtkPaned" id="diff_paned">
+                            <property name="orientation">horizontal</property>
+                            <property name="wide-handle">true</property>
+                            <property name="vexpand">true</property>
+                            <property name="hexpand">true</property>
+                            <property name="position">590</property>
+
+                            <!-- Panel Izquierdo (Original / Base) -->
+                            <property name="start-child">
+                              <object class="GtkBox">
+                                <property name="orientation">vertical</property>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">horizontal</property>
+                                    <property name="spacing">8</property>
+                                    <style>
+                                      <class name="panel-header"/>
+                                    </style>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Original (Base)</property>
+                                        <style>
+                                          <class name="heading"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">— JSON / dump</property>
+                                        <property name="hexpand">true</property>
+                                        <property name="xalign">0</property>
+                                        <style>
+                                          <class name="dim-label"/>
+                                          <class name="caption"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="lbl_left_version">
+                                        <property name="label">v1.4.0</property>
+                                        <style>
+                                          <class name="badge-error"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">edit-copy-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Copiar código original</property>
+                                        <property name="action-name">win.copy-left</property>
+                                        <style>
+                                          <class name="flat"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">document-open-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Cargar archivo base</property>
+                                        <property name="action-name">win.open-left</property>
+                                        <style>
+                                          <class name="flat"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkScrolledWindow">
+                                    <property name="vexpand">true</property>
+                                    <property name="hexpand">true</property>
+                                    <child>
+                                      <object class="GtkSourceView" id="source_diff_left">
+                                        <property name="show-line-numbers">true</property>
+                                        <property name="show-line-marks">true</property>
+                                        <property name="highlight-current-line">true</property>
+                                        <property name="monospace">true</property>
+                                        <property name="tab-width">2</property>
+                                        <property name="insert-spaces-instead-of-tabs">true</property>
+                                        <property name="top-margin">6</property>
+                                        <property name="bottom-margin">6</property>
+                                        <property name="left-margin">8</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                            </property>
+
+                            <!-- Panel Derecho (Modificado / Nuevo) -->
+                            <property name="end-child">
+                              <object class="GtkBox">
+                                <property name="orientation">vertical</property>
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">horizontal</property>
+                                    <property name="spacing">8</property>
+                                    <style>
+                                      <class name="panel-header"/>
+                                    </style>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">Modificado (Nuevo)</property>
+                                        <style>
+                                          <class name="heading"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">— JSON</property>
+                                        <property name="hexpand">true</property>
+                                        <property name="xalign">0</property>
+                                        <style>
+                                          <class name="dim-label"/>
+                                          <class name="caption"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel" id="lbl_right_version">
+                                        <property name="label">v1.5.0</property>
+                                        <style>
+                                          <class name="badge-success"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">edit-copy-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Copiar código nuevo</property>
+                                        <property name="action-name">win.copy-right</property>
+                                        <style>
+                                          <class name="flat"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">edit-paste-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Pegar del portapapeles</property>
+                                        <property name="action-name">win.paste-right</property>
+                                        <style>
+                                          <class name="flat"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkScrolledWindow">
+                                    <property name="vexpand">true</property>
+                                    <property name="hexpand">true</property>
+                                    <child>
+                                      <object class="GtkSourceView" id="source_diff_right">
+                                        <property name="show-line-numbers">true</property>
+                                        <property name="show-line-marks">true</property>
+                                        <property name="highlight-current-line">true</property>
+                                        <property name="monospace">true</property>
+                                        <property name="tab-width">2</property>
+                                        <property name="insert-spaces-instead-of-tabs">true</property>
+                                        <property name="top-margin">6</property>
+                                        <property name="bottom-margin">6</property>
+                                        <property name="left-margin">8</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+
+                        <!-- Barra de estado inferior del Diff -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">12</property>
+                            <style>
+                              <class name="status-bar"/>
+                            </style>
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_removals">
+                                <property name="label">2 supresiones (-)</property>
+                                <style>
+                                  <class name="badge-error"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_additions">
+                                <property name="label">3 adiciones (+)</property>
+                                <style>
+                                  <class name="badge-success"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkSeparator">
+                                <property name="orientation">vertical</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_sync">
+                                <property name="label">↻ Diferencias sincronizadas</property>
+                                <property name="hexpand">true</property>
+                                <property name="xalign">0</property>
+                                <style>
+                                  <class name="caption"/>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label">UTF-8  •  JSON  •  Espacios: 2</property>
+                                <style>
+                                  <class name="caption"/>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_cursor">
+                                <property name="label">Ln 1, Col 1</property>
+                                <style>
+                                  <class name="badge-pill"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+
+                <!-- ========================================== -->
+                <!-- PÁGINA 2: INSPECTOR & FORMATEADOR          -->
+                <!-- ========================================== -->
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">inspector_page</property>
+                    <property name="title" translatable="yes">Inspector</property>
+                    <property name="icon-name">edit-find-symbolic</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+
+                        <!-- Barra de acciones rápidas para formato -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">8</property>
+                            <style>
+                              <class name="sub-toolbar"/>
+                            </style>
+
+                            <child>
+                              <object class="GtkButton" id="btn_format_json">
+                                <property name="label" translatable="yes">Formatear JSON</property>
+                                <property name="icon-name">format-indent-more-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Aplica sangría seleccionada y valida sintaxis</property>
+                                <property name="action-name">win.format-json</property>
+                                <style>
+                                  <class name="suggested-action"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkButton" id="btn_vardump_to_json">
+                                <property name="label" translatable="yes">var_dump → JSON</property>
+                                <property name="icon-name">view-refresh-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Convierte salida cruda de PHP a JSON estándar</property>
+                                <property name="action-name">win.convert-vardump</property>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkButton" id="btn_minify_json">
+                                <property name="label" translatable="yes">Minificar</property>
+                                <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="action-name">win.minify-json</property>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkSeparator">
+                                <property name="orientation">vertical</property>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkLabel" id="lbl_syntax_valid">
+                                <property name="label">✓ Sintaxis Válida</property>
+                                <style>
+                                  <class name="badge-success"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <!-- Controles derechos: Indentación, Copiar, Limpiar -->
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <property name="spacing">8</property>
+                                <property name="hexpand">true</property>
+                                <property name="halign">end</property>
+
+                                <child>
+                                  <object class="GtkDropDown" id="dd_indent">
+                                    <property name="model">
+                                      <object class="GtkStringList">
+                                        <items>
+                                          <item translatable="yes">Indentación: 2 Espacios</item>
+                                          <item translatable="yes">Indentación: 4 Espacios</item>
+                                          <item translatable="yes">Indentación: Tabuladores</item>
+                                        </items>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+
+                                <child>
+                                  <object class="GtkButton" id="btn_copy_inspector">
+                                    <property name="label" translatable="yes">Copiar</property>
+                                    <property name="icon-name">edit-copy-symbolic</property>
+                                    <property name="action-name">win.copy-inspector</property>
+                                  </object>
+                                </child>
+
+                                <child>
+                                  <object class="GtkButton" id="btn_clear_inspector">
+                                    <property name="icon-name">edit-clear-all-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Limpiar contenido</property>
+                                    <property name="action-name">win.clear-inspector</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Subcabecera de Modo y Metadatos del Inspector -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">10</property>
+                            <style>
+                              <class name="panel-header"/>
+                            </style>
+
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <style>
+                                  <class name="linked"/>
+                                </style>
+                                <child>
+                                  <object class="GtkToggleButton" id="btn_mode_json">
+                                    <property name="label">JSON</property>
+                                    <property name="active">true</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkToggleButton" id="btn_mode_vardump">
+                                    <property name="label">PHP var_dump</property>
+                                    <property name="group">btn_mode_json</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkToggleButton" id="btn_mode_raw">
+                                    <property name="label">Array raw</property>
+                                    <property name="group">btn_mode_json</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkLabel" id="lbl_inspector_file">
+                                <property name="label">schema/payload_v2.json</property>
+                                <property name="hexpand">true</property>
+                                <property name="xalign">0</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkLabel" id="lbl_node_count">
+                                <property name="label">25 nodos</property>
+                                <style>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label">|</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                            </child>
+
+                            <child>
+                              <object class="GtkLabel" id="lbl_payload_size">
+                                <property name="label">0.9 KB</property>
+                                <style>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Editor de código principal + Minimapa lateral -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="vexpand">true</property>
+                            <property name="hexpand">true</property>
+                            <child>
+                              <object class="GtkScrolledWindow">
+                                <property name="vexpand">true</property>
+                                <property name="hexpand">true</property>
+                                <child>
+                                  <object class="GtkSourceView" id="source_inspector">
+                                    <property name="show-line-numbers">true</property>
+                                    <property name="show-line-marks">true</property>
+                                    <property name="highlight-current-line">true</property>
+                                    <property name="monospace">true</property>
+                                    <property name="tab-width">2</property>
+                                    <property name="insert-spaces-instead-of-tabs">true</property>
+                                    <property name="top-margin">6</property>
+                                    <property name="bottom-margin">6</property>
+                                    <property name="left-margin">8</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkSourceMap" id="source_map">
+                                <property name="view">source_inspector</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Barra de estado inferior del Inspector -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">12</property>
+                            <style>
+                              <class name="status-bar"/>
+                            </style>
+                            <child>
+                              <object class="GtkLabel" id="lbl_tree_stats">
+                                <property name="label">Árbol JSON: 4 niveles | 12 claves</property>
+                                <style>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label">|</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_rfc_badge">
+                                <property name="label">Válido RFC 8259</property>
+                                <style>
+                                  <class name="badge-success"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_inspector_status">
+                                <property name="label">Listo</property>
+                                <property name="hexpand">true</property>
+                                <property name="xalign">0</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_indent_info">
+                                <property name="label">UTF-8  |  2 Espacios</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                  <class name="caption"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_inspector_cursor">
+                                <property name="label">Ln 1, Col 1</property>
+                                <style>
+                                  <class name="badge-pill"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+
+                <!-- ========================================== -->
+                <!-- PÁGINA 3: PREFERENCIAS                     -->
+                <!-- ========================================== -->
+                <child>
+                  <object class="AdwViewStackPage">
+                    <property name="name">preferences_page</property>
+                    <property name="title" translatable="yes">Preferencias</property>
+                    <property name="icon-name">emblem-system-symbolic</property>
+                    <property name="child">
+                      <object class="AdwPreferencesPage">
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Editor de Código</property>
+                            <property name="description" translatable="yes">Personaliza la visualización de los editores GtkSourceView</property>
+                            <child>
+                              <object class="AdwSwitchRow" id="pref_line_numbers">
+                                <property name="title" translatable="yes">Mostrar números de línea</property>
+                                <property name="active">true</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="pref_minimap">
+                                <property name="title" translatable="yes">Mostrar minimapa en el Inspector</property>
+                                <property name="active">true</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="pref_highlight_line">
+                                <property name="title" translatable="yes">Resaltar línea actual</property>
+                                <property name="active">true</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="pref_word_wrap">
+                                <property name="title" translatable="yes">Ajuste automático de línea (Word Wrap)</property>
+                                <property name="active">false</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Motor de Diferencias (Diff Engine)</property>
+                            <property name="description" translatable="yes">Ajustes del algoritmo de comparación del crate similar</property>
+                            <child>
+                              <object class="AdwSwitchRow" id="pref_patience">
+                                <property name="title" translatable="yes">Algoritmo Patience</property>
+                                <property name="subtitle" translatable="yes">Produce diffs más semánticos para estructuras JSON y código fuente</property>
+                                <property name="active">false</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+
+              </object>
+            </child>
+
+            <!-- Barra Inferior Global (Footer) -->
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">12</property>
+                <style>
+                  <class name="global-footer"/>
+                </style>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">✓ Git: main   |   UTF-8   |   LF</property>
+                    <style>
+                      <class name="caption"/>
+                      <class name="dim-label"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="spacing">8</property>
+                    <property name="hexpand">true</property>
+                    <property name="halign">end</property>
+                    <child>
+                      <object class="GtkLabel" id="lbl_footer_diff_badge">
+                        <property name="label">+3  -2</property>
+                        <style>
+                          <class name="badge-pill"/>
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">VarDiff AST Engine</property>
+                        <style>
+                          <class name="caption"/>
+                          <class name="dim-label"/>
+                        </style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+</interface>
