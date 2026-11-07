@@ -4,6 +4,7 @@ use crate::core::json::{
 };
 use crate::core::vardump::{parse_vardump, vardump_to_json_string};
 use crate::ui::editor::EditorView;
+use crate::ui::folding::FoldingController;
 use gtk4::gdk;
 use gtk4::gio;
 use gtk4::glib;
@@ -21,107 +22,17 @@ use std::time::Duration;
 
 const ASYNC_LINE_THRESHOLD: usize = 1000;
 
-const SAMPLE_DIFF_OLD: &str = r#"{
-  "service_name": "vardiff-core",
-  "version": "1.4.0",
-  "environment": "production",
-  "config": {
-    "debug_mode": true,
-    "workers_count": 8,
-    "cache_driver": "redis_sentinel",
-    "max_payload_mb": 64,
-    "network_profile": {
-      "timeout_seconds": 30,
-      "keep_alive": true,
-      "tls_enabled": true
-    }
-  }
-}"#;
-
-const SAMPLE_DIFF_NEW: &str = r#"{
-  "service_name": "vardiff-core",
-  "version": "1.5.0",
-  "environment": "production",
-  "config": {
-    "debug_mode": false,
-    "workers_count": 8,
-    "cache_driver": "redis_sentinel",
-    "max_payload_mb": 64,
-    "network_profile": {
-      "timeout_seconds": 60,
-      "retry_policy": {"max": 3, "backoff": "exponential"},
-      "circuit_breaker": true,
-      "keep_alive": true,
-      "tls_enabled": true
-    }
-  }
-}"#;
-
-const SAMPLE_JSON: &str = r#"{
-  "id": "usr_9f83a21",
-  "actor": {
-    "username": "miguel.valenzuela",
-    "role": "systems-architect",
-    "active": true,
-    "quota_limit": 4096,
-    "deleted_at": null
-  },
-  "execution_context": {
-    "runtime": "linux-x86_64-gnome46",
-    "pid": 28419,
-    "memory_mb": 128.45,
-    "privileged": false
-  },
-  "ast_transform_rules": [
-    {
-      "target": "PHP_XDEBUG_DUMP",
-      "strip_depth_tags": true,
-      "cast_numeric_strings": true,
-      "resolve_references": true
-    },
-    {
-      "target": "FORMATTED_JSON",
-      "sort_keys_alphabetical": false,
-      "escape_slashes": false
-    }
-  ]
-}"#;
-
-const SAMPLE_VARDUMP: &str = r#"object(App\Models\User)#42 (6) {
-  ["id"]=>
-  string(11) "usr_9f83a21"
-  ["username"]=>
-  string(17) "miguel.valenzuela"
-  ["role"]=>
-  string(17) "systems-architect"
-  ["active"]=>
-  bool(true)
-  ["roles"]=>
-  array(3) {
-    [0]=>
-    string(5) "admin"
-    [1]=>
-    string(9) "architect"
-    [2]=>
-    string(7) "manager"
-  }
-  ["execution_context"]=>
-  array(3) {
-    ["runtime"]=>
-    string(20) "linux-x86_64-gnome46"
-    ["pid"]=>
-    int(28419)
-    ["memory_mb"]=>
-    float(128.45)
-  }
-  ["api_key":"App\Models\User":private]=>
-  string(32) "9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e"
-}"#;
-
 enum WorkerResult {
     InspectorFormatted { text: String, message: String },
     DiffCalculated(DiffSummary),
     Error(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileTarget {
+    Active,
+    DiffLeft,
+    DiffRight,
 }
 
 mod imp {
@@ -140,6 +51,10 @@ mod imp {
         pub source_diff_left: TemplateChild<sourceview5::View>,
         #[template_child]
         pub source_diff_right: TemplateChild<sourceview5::View>,
+        #[template_child]
+        pub lbl_left_file: TemplateChild<gtk4::Label>,
+        #[template_child]
+        pub lbl_right_file: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_diff_count: TemplateChild<gtk4::Label>,
         #[template_child]
@@ -162,6 +77,8 @@ mod imp {
         pub lbl_syntax_valid: TemplateChild<gtk4::Label>,
         #[template_child]
         pub dd_indent: TemplateChild<gtk4::DropDown>,
+        #[template_child]
+        pub btn_paste_inspector: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_copy_inspector: TemplateChild<gtk4::Button>,
         #[template_child]
@@ -210,6 +127,10 @@ mod imp {
         pub tag_span_inserted: OnceCell<gtk4::TextTag>,
         pub hunk_positions: RefCell<Vec<(usize, usize)>>,
         pub current_hunk_idx: Cell<usize>,
+        pub diff_debounce_source: RefCell<Option<glib::SourceId>>,
+        pub fold_inspector: OnceCell<FoldingController>,
+        pub fold_diff_left: OnceCell<FoldingController>,
+        pub fold_diff_right: OnceCell<FoldingController>,
     }
 
     #[glib::object_subclass]
@@ -335,16 +256,19 @@ impl VarDiffWindow {
         // 5. Connect Signals (Cursor tracking, live metrics, switches, dropdowns, preferences)
         self.setup_signals();
 
-        // 6. Register Window Actions & Shortcuts
+        // 6. Setup Code Folding Gutters
+        let fold_ins = FoldingController::new(imp.source_inspector.get());
+        let fold_dl = FoldingController::new(imp.source_diff_left.get());
+        let fold_dr = FoldingController::new(imp.source_diff_right.get());
+        imp.fold_inspector.set(fold_ins).ok();
+        imp.fold_diff_left.set(fold_dl).ok();
+        imp.fold_diff_right.set(fold_dr).ok();
+
+        // 7. Register Window Actions & Shortcuts
         self.setup_actions();
         self.setup_shortcuts();
 
-        // 7. Populate Default Payloads matching Mockups
-        left_buf.set_text(SAMPLE_DIFF_OLD);
-        right_buf.set_text(SAMPLE_DIFF_NEW);
-        inspector_buf.set_text(SAMPLE_JSON);
-
-        self.handle_compute_diff();
+        // 8. Start with clean editors and initialize metrics
         self.update_inspector_metrics();
     }
 
@@ -452,7 +376,6 @@ impl VarDiffWindow {
             if btn.is_active() {
                 let imp = win_m_json.imp();
                 Self::set_buffer_language(&imp.source_inspector.buffer(), "json");
-                imp.lbl_inspector_file.set_label("schema/payload_v2.json");
                 win_m_json.update_inspector_metrics();
             }
         });
@@ -462,11 +385,6 @@ impl VarDiffWindow {
             if btn.is_active() {
                 let imp = win_m_vd.imp();
                 Self::set_buffer_language(&imp.source_inspector.buffer(), "php");
-                imp.lbl_inspector_file.set_label("dump/xdebug_output.dump");
-                let buf = imp.source_inspector.buffer();
-                if buf.char_count() == 0 || analyze_json(&buf.text(&buf.start_iter(), &buf.end_iter(), true)).is_ok() {
-                    buf.set_text(SAMPLE_VARDUMP);
-                }
                 win_m_vd.update_inspector_metrics();
             }
         });
@@ -476,7 +394,6 @@ impl VarDiffWindow {
             if btn.is_active() {
                 let imp = win_m_raw.imp();
                 Self::set_buffer_language(&imp.source_inspector.buffer(), "json");
-                imp.lbl_inspector_file.set_label("raw/array_payload.txt");
                 win_m_raw.update_inspector_metrics();
             }
         });
@@ -485,6 +402,26 @@ impl VarDiffWindow {
         let win_ibuf = self.clone();
         imp.source_inspector.buffer().connect_changed(move |_| {
             win_ibuf.update_inspector_metrics();
+            if let Some(ctrl) = win_ibuf.imp().fold_inspector.get() {
+                ctrl.update_regions();
+            }
+        });
+
+        // Diff buffers changes -> debounced live diff computation
+        let win_dbuf_l = self.clone();
+        imp.source_diff_left.buffer().connect_changed(move |_| {
+            win_dbuf_l.schedule_diff_update();
+            if let Some(ctrl) = win_dbuf_l.imp().fold_diff_left.get() {
+                ctrl.update_regions();
+            }
+        });
+
+        let win_dbuf_r = self.clone();
+        imp.source_diff_right.buffer().connect_changed(move |_| {
+            win_dbuf_r.schedule_diff_update();
+            if let Some(ctrl) = win_dbuf_r.imp().fold_diff_right.get() {
+                ctrl.update_regions();
+            }
         });
 
         // Cursor position tracking: Inspector
@@ -592,9 +529,34 @@ impl VarDiffWindow {
         let self_open_l = self.clone();
         let act_open_l = gio::SimpleAction::new("open-left", None);
         act_open_l.connect_activate(move |_, _| {
-            self_open_l.handle_open_file(true);
+            self_open_l.handle_open_file_target(FileTarget::DiffLeft);
         });
         self.add_action(&act_open_l);
+
+        // Open specifically into right diff panel
+        let self_open_r = self.clone();
+        let act_open_r = gio::SimpleAction::new("open-right", None);
+        act_open_r.connect_activate(move |_, _| {
+            self_open_r.handle_open_file_target(FileTarget::DiffRight);
+        });
+        self.add_action(&act_open_r);
+
+        // Paste into left diff panel
+        let self_pst_l = self.clone();
+        let act_pst_l = gio::SimpleAction::new("paste-left", None);
+        act_pst_l.connect_activate(move |_, _| {
+            let win_clone = self_pst_l.clone();
+            self_pst_l.clipboard().read_text_async(
+                gio::Cancellable::NONE,
+                move |res| {
+                    if let Ok(Some(text)) = res {
+                        win_clone.imp().source_diff_left.buffer().set_text(&text);
+                        win_clone.handle_compute_diff();
+                    }
+                },
+            );
+        });
+        self.add_action(&act_pst_l);
 
         // Copy left diff panel
         let self_cpy_l = self.clone();
@@ -701,6 +663,24 @@ impl VarDiffWindow {
         });
         self.add_action(&act_min);
 
+        // Paste into Inspector
+        let self_pst_ins = self.clone();
+        let act_pst_ins = gio::SimpleAction::new("paste-inspector", None);
+        act_pst_ins.connect_activate(move |_, _| {
+            let win_clone = self_pst_ins.clone();
+            self_pst_ins.clipboard().read_text_async(
+                gio::Cancellable::NONE,
+                move |res| {
+                    if let Ok(Some(text)) = res {
+                        let imp = win_clone.imp();
+                        imp.source_inspector.buffer().set_text(&text);
+                        win_clone.update_inspector_metrics();
+                    }
+                },
+            );
+        });
+        self.add_action(&act_pst_ins);
+
         // Copy Inspector (with temporary button confirmation feedback)
         let self_cpy = self.clone();
         let act_cpy = gio::SimpleAction::new("copy-inspector", None);
@@ -711,10 +691,10 @@ impl VarDiffWindow {
             if !text.is_empty() {
                 self_cpy.clipboard().set_text(&text);
                 imp.lbl_inspector_status.set_label("Copiado al portapapeles");
-                imp.btn_copy_inspector.set_label("✓ Copiado");
+                imp.btn_copy_inspector.set_tooltip_text(Some("Copiado"));
                 let btn_clone = imp.btn_copy_inspector.clone();
                 glib::timeout_add_local_once(Duration::from_millis(1800), move || {
-                    btn_clone.set_label("Copiar");
+                    btn_clone.set_tooltip_text(Some("Copiar al portapapeles"));
                 });
             }
         });
@@ -726,6 +706,7 @@ impl VarDiffWindow {
         act_clr_ins.connect_activate(move |_, _| {
             let imp = self_clr_ins.imp();
             imp.source_inspector.buffer().set_text("");
+            imp.lbl_inspector_file.set_label("Sin archivo");
             imp.lbl_inspector_status.set_label("Editor limpiado");
         });
         self.add_action(&act_clr_ins);
@@ -737,42 +718,6 @@ impl VarDiffWindow {
             self_help.show_help_dialog();
         });
         self.add_action(&act_help);
-
-        // Samples: var_dump
-        let self_svd = self.clone();
-        let act_svd = gio::SimpleAction::new("sample-vardump", None);
-        act_svd.connect_activate(move |_, _| {
-            let imp = self_svd.imp();
-            imp.btn_mode_vardump.set_active(true);
-            imp.source_inspector.buffer().set_text(SAMPLE_VARDUMP);
-            imp.main_stack.set_visible_child_name("inspector_page");
-            imp.lbl_inspector_status.set_label("Ejemplo de var_dump cargado");
-        });
-        self.add_action(&act_svd);
-
-        // Samples: JSON
-        let self_sjs = self.clone();
-        let act_sjs = gio::SimpleAction::new("sample-json", None);
-        act_sjs.connect_activate(move |_, _| {
-            let imp = self_sjs.imp();
-            imp.btn_mode_json.set_active(true);
-            imp.source_inspector.buffer().set_text(SAMPLE_JSON);
-            imp.main_stack.set_visible_child_name("inspector_page");
-            imp.lbl_inspector_status.set_label("Ejemplo de JSON cargado");
-        });
-        self.add_action(&act_sjs);
-
-        // Samples: Diff
-        let self_sdf = self.clone();
-        let act_sdf = gio::SimpleAction::new("sample-diff", None);
-        act_sdf.connect_activate(move |_, _| {
-            let imp = self_sdf.imp();
-            imp.source_diff_left.buffer().set_text(SAMPLE_DIFF_OLD);
-            imp.source_diff_right.buffer().set_text(SAMPLE_DIFF_NEW);
-            imp.main_stack.set_visible_child_name("diff_page");
-            self_sdf.handle_compute_diff();
-        });
-        self.add_action(&act_sdf);
     }
 
     fn update_inspector_metrics(&self) {
@@ -834,8 +779,17 @@ impl VarDiffWindow {
     }
 
     fn handle_open_file(&self, force_left_diff: bool) {
+        let target = if force_left_diff {
+            FileTarget::DiffLeft
+        } else {
+            FileTarget::Active
+        };
+        self.handle_open_file_target(target);
+    }
+
+    fn handle_open_file_target(&self, target: FileTarget) {
         let file_dialog = gtk4::FileDialog::builder()
-            .title("Abrir archivo para inspección o comparación")
+            .title("Abrir archivo")
             .modal(true)
             .build();
 
@@ -845,31 +799,44 @@ impl VarDiffWindow {
                 let filename = file
                     .basename()
                     .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "archivo.json".to_string());
+                    .unwrap_or_else(|| "archivo".to_string());
 
                 if let Ok((contents, _)) = file.load_contents(gio::Cancellable::NONE) {
                     if let Ok(text) = String::from_utf8(contents.to_vec()) {
                         let imp = self_clone.imp();
-                        let active = imp.main_stack.visible_child_name().unwrap_or_default();
-                        if force_left_diff {
-                            imp.source_diff_left.buffer().set_text(&text);
-                            self_clone.handle_compute_diff();
-                        } else if active == "diff_page" {
-                            let left_buf = imp.source_diff_left.buffer();
-                            let right_buf = imp.source_diff_right.buffer();
-                            if left_buf.char_count() == 0 {
-                                left_buf.set_text(&text);
-                            } else {
-                                right_buf.set_text(&text);
+                        match target {
+                            FileTarget::DiffLeft => {
+                                imp.source_diff_left.buffer().set_text(&text);
+                                imp.lbl_left_file.set_label(&filename);
                                 self_clone.handle_compute_diff();
                             }
-                        } else {
-                            imp.source_inspector.buffer().set_text(&text);
-                            imp.lbl_inspector_file.set_label(&filename);
-                            imp.lbl_inspector_status.set_label(&format!(
-                                "Archivo cargado: {} líneas",
-                                count_lines(&text)
-                            ));
+                            FileTarget::DiffRight => {
+                                imp.source_diff_right.buffer().set_text(&text);
+                                imp.lbl_right_file.set_label(&filename);
+                                self_clone.handle_compute_diff();
+                            }
+                            FileTarget::Active => {
+                                let active = imp.main_stack.visible_child_name().unwrap_or_default();
+                                if active == "diff_page" {
+                                    let left_buf = imp.source_diff_left.buffer();
+                                    let right_buf = imp.source_diff_right.buffer();
+                                    if left_buf.char_count() == 0 {
+                                        left_buf.set_text(&text);
+                                        imp.lbl_left_file.set_label(&filename);
+                                    } else {
+                                        right_buf.set_text(&text);
+                                        imp.lbl_right_file.set_label(&filename);
+                                        self_clone.handle_compute_diff();
+                                    }
+                                } else {
+                                    imp.source_inspector.buffer().set_text(&text);
+                                    imp.lbl_inspector_file.set_label(&filename);
+                                    imp.lbl_inspector_status.set_label(&format!(
+                                        "Archivo cargado: {} líneas",
+                                        count_lines(&text)
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -926,6 +893,21 @@ impl VarDiffWindow {
             imp.source_diff_right
                 .scroll_to_iter(&mut iter, 0.2, false, 0.0, 0.5);
         }
+    }
+
+    fn schedule_diff_update(&self) {
+        let imp = self.imp();
+        if let Some(source_id) = imp.diff_debounce_source.borrow_mut().take() {
+            source_id.remove();
+        }
+
+        let self_clone = self.clone();
+        let new_source = glib::timeout_add_local_once(Duration::from_millis(150), move || {
+            self_clone.imp().diff_debounce_source.borrow_mut().take();
+            self_clone.handle_compute_diff();
+        });
+
+        *imp.diff_debounce_source.borrow_mut() = Some(new_source);
     }
 
     fn handle_compute_diff(&self) {

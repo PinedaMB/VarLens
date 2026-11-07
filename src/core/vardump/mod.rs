@@ -278,13 +278,6 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
             }
             Ok(Value::Object(map))
         }
-        Rule::printr_value => {
-            if let Some(inner) = pair.into_inner().next() {
-                pair_to_value(inner)
-            } else {
-                Ok(Value::Null)
-            }
-        }
         Rule::printr_scalar => Ok(parse_printr_scalar(pair.as_str())),
         Rule::resource_val => Ok(Value::String(pair.as_str().to_string())),
         Rule::recursion_val => Ok(Value::String("*RECURSION*".to_string())),

@@ -2,7 +2,7 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 root = { SOI ~ xdebug_header? ~ value ~ EOI }
 
-xdebug_header = _{ ("/" | (ASCII_ALPHA ~ ":")) ~ (!("\r" | "\n") ~ ANY)* }
+xdebug_header = @{ ("/" | (ASCII_ALPHA ~ ":")) ~ (!("\r" | "\n") ~ ANY)* ~ ("\r" | "\n")+ }
 
 value = {
     reference? ~ (
@@ -42,7 +42,7 @@ float_lit = @{
     | "NAN"
 }
 
-string_val = { "string(" ~ length ~ ") " ~ quoted_string }
+string_val = { "string(" ~ length ~ ")" ~ quoted_string }
 length = @{ ASCII_DIGIT+ }
 quoted_string = ${ "\"" ~ inner_string ~ "\"" }
 inner_string = @{ ( "\\\"" | "\\\\" | (!"\"" ~ ANY) )* }
@@ -67,8 +67,8 @@ inner_key = @{ ( "\\\"" | "\\\\" | (!"\"" ~ ANY) )* }
 identifier = @{ (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
 
 key = {
-    int_lit
-    | quoted_key
+    quoted_key
+    | int_lit
     | identifier
 }
 
@@ -79,6 +79,5 @@ uninitialized_val = { "uninitialized(" ~ (!")" ~ ANY)+ ~ ")" }
 // Support for PHP print_r / Array raw format
 printr_array = { ^"Array" ~ "(" ~ printr_entry* ~ ")" }
 printr_object = { class_name ~ ^"Object" ~ "(" ~ printr_entry* ~ ")" }
-printr_entry = { "[" ~ object_key ~ "]" ~ "=>" ~ printr_value }
-printr_value = { printr_array | printr_object | printr_scalar? }
-printr_scalar = @{ !("[" | ")" | "\r" | "\n") ~ (!("\r" | "\n") ~ ANY)+ }
+printr_entry = { "[" ~ object_key ~ "]" ~ "=>" ~ NEWLINE* ~ (printr_array | printr_object | printr_scalar) }
+printr_scalar = @{ !("[" | ")" | "\r" | "\n") ~ (!("\r" | "\n") ~ ANY)* }

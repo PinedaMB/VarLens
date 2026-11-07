@@ -11,6 +11,11 @@ use ui::window::VarDiffWindow;
 const APP_ID: &str = "io.github.vardiff.App";
 
 fn main() -> glib::ExitCode {
+    // If GSK_RENDERER is not explicitly specified, prefer cairo or gl to avoid Vulkan swapchain OOM crashes on Linux
+    if std::env::var_os("GSK_RENDERER").is_none() {
+        std::env::set_var("GSK_RENDERER", "gl");
+    }
+
     if let Err(e) = gtk4::init() {
         eprintln!("Error al inicializar GTK4: {}", e);
         return glib::ExitCode::FAILURE;

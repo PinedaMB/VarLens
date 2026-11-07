@@ -8,20 +8,6 @@
   <menu id="primary_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">Cargar ejemplo var_dump</attribute>
-        <attribute name="action">win.sample-vardump</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Cargar ejemplo JSON</attribute>
-        <attribute name="action">win.sample-json</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Cargar ejemplo Diff</attribute>
-        <attribute name="action">win.sample-diff</attribute>
-      </item>
-    </section>
-    <section>
-      <item>
         <attribute name="label" translatable="yes">Atajos del teclado</attribute>
         <attribute name="action">win.show-help-overlay</attribute>
       </item>
@@ -159,7 +145,7 @@
                             <!-- Badge Contador de Cambios -->
                             <child>
                               <object class="GtkLabel" id="lbl_diff_count">
-                                <property name="label">2 diferencias encontradas</property>
+                                <property name="label">0 diferencias encontradas</property>
                                 <style>
                                   <class name="badge-pill"/>
                                 </style>
@@ -268,8 +254,8 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">— JSON / dump</property>
+                                      <object class="GtkLabel" id="lbl_left_file">
+                                        <property name="label">Sin archivo</property>
                                         <property name="hexpand">true</property>
                                         <property name="xalign">0</property>
                                         <style>
@@ -279,18 +265,20 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel" id="lbl_left_version">
-                                        <property name="label">v1.4.0</property>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">edit-copy-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Copiar código original</property>
+                                        <property name="action-name">win.copy-left</property>
                                         <style>
-                                          <class name="badge-error"/>
+                                          <class name="flat"/>
                                         </style>
                                       </object>
                                     </child>
                                     <child>
                                       <object class="GtkButton">
-                                        <property name="icon-name">edit-copy-symbolic</property>
-                                        <property name="tooltip-text" translatable="yes">Copiar código original</property>
-                                        <property name="action-name">win.copy-left</property>
+                                        <property name="icon-name">edit-paste-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Pegar del portapapeles</property>
+                                        <property name="action-name">win.paste-left</property>
                                         <style>
                                           <class name="flat"/>
                                         </style>
@@ -350,21 +338,13 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">— JSON</property>
+                                      <object class="GtkLabel" id="lbl_right_file">
+                                        <property name="label">Sin archivo</property>
                                         <property name="hexpand">true</property>
                                         <property name="xalign">0</property>
                                         <style>
                                           <class name="dim-label"/>
                                           <class name="caption"/>
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel" id="lbl_right_version">
-                                        <property name="label">v1.5.0</property>
-                                        <style>
-                                          <class name="badge-success"/>
                                         </style>
                                       </object>
                                     </child>
@@ -383,6 +363,16 @@
                                         <property name="icon-name">edit-paste-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Pegar del portapapeles</property>
                                         <property name="action-name">win.paste-right</property>
+                                        <style>
+                                          <class name="flat"/>
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkButton">
+                                        <property name="icon-name">document-open-symbolic</property>
+                                        <property name="tooltip-text" translatable="yes">Cargar archivo modificado</property>
+                                        <property name="action-name">win.open-right</property>
                                         <style>
                                           <class name="flat"/>
                                         </style>
@@ -424,7 +414,7 @@
                             </style>
                             <child>
                               <object class="GtkLabel" id="lbl_diff_removals">
-                                <property name="label">2 supresiones (-)</property>
+                                <property name="label">0 supresiones (-)</property>
                                 <style>
                                   <class name="badge-error"/>
                                 </style>
@@ -432,7 +422,7 @@
                             </child>
                             <child>
                               <object class="GtkLabel" id="lbl_diff_additions">
-                                <property name="label">3 adiciones (+)</property>
+                                <property name="label">0 adiciones (+)</property>
                                 <style>
                                   <class name="badge-success"/>
                                 </style>
@@ -501,9 +491,8 @@
 
                             <child>
                               <object class="GtkButton" id="btn_format_json">
-                                <property name="label" translatable="yes">Formatear JSON</property>
                                 <property name="icon-name">format-indent-more-symbolic</property>
-                                <property name="tooltip-text" translatable="yes">Aplica sangría seleccionada y valida sintaxis</property>
+                                <property name="tooltip-text" translatable="yes">Formatear JSON</property>
                                 <property name="action-name">win.format-json</property>
                                 <style>
                                   <class name="suggested-action"/>
@@ -513,17 +502,16 @@
 
                             <child>
                               <object class="GtkButton" id="btn_vardump_to_json">
-                                <property name="label" translatable="yes">var_dump → JSON</property>
                                 <property name="icon-name">view-refresh-symbolic</property>
-                                <property name="tooltip-text" translatable="yes">Convierte salida cruda de PHP a JSON estándar</property>
+                                <property name="tooltip-text" translatable="yes">var_dump → JSON</property>
                                 <property name="action-name">win.convert-vardump</property>
                               </object>
                             </child>
 
                             <child>
                               <object class="GtkButton" id="btn_minify_json">
-                                <property name="label" translatable="yes">Minificar</property>
                                 <property name="icon-name">zoom-fit-best-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Minificar JSON</property>
                                 <property name="action-name">win.minify-json</property>
                               </object>
                             </child>
@@ -536,9 +524,9 @@
 
                             <child>
                               <object class="GtkLabel" id="lbl_syntax_valid">
-                                <property name="label">✓ Sintaxis Válida</property>
+                                <property name="label">Editor vacío</property>
                                 <style>
-                                  <class name="badge-success"/>
+                                  <class name="badge-pill"/>
                                 </style>
                               </object>
                             </child>
@@ -566,9 +554,17 @@
                                 </child>
 
                                 <child>
+                                  <object class="GtkButton" id="btn_paste_inspector">
+                                    <property name="icon-name">edit-paste-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Pegar</property>
+                                    <property name="action-name">win.paste-inspector</property>
+                                  </object>
+                                </child>
+
+                                <child>
                                   <object class="GtkButton" id="btn_copy_inspector">
-                                    <property name="label" translatable="yes">Copiar</property>
                                     <property name="icon-name">edit-copy-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Copiar</property>
                                     <property name="action-name">win.copy-inspector</property>
                                   </object>
                                 </child>
@@ -623,7 +619,7 @@
 
                             <child>
                               <object class="GtkLabel" id="lbl_inspector_file">
-                                <property name="label">schema/payload_v2.json</property>
+                                <property name="label">Sin archivo</property>
                                 <property name="hexpand">true</property>
                                 <property name="xalign">0</property>
                                 <style>
@@ -635,7 +631,7 @@
 
                             <child>
                               <object class="GtkLabel" id="lbl_node_count">
-                                <property name="label">25 nodos</property>
+                                <property name="label">0 nodos</property>
                                 <style>
                                   <class name="caption"/>
                                 </style>
@@ -653,7 +649,7 @@
 
                             <child>
                               <object class="GtkLabel" id="lbl_payload_size">
-                                <property name="label">0.9 KB</property>
+                                <property name="label">0 B</property>
                                 <style>
                                   <class name="caption"/>
                                 </style>
@@ -705,7 +701,7 @@
                             </style>
                             <child>
                               <object class="GtkLabel" id="lbl_tree_stats">
-                                <property name="label">Árbol JSON: 4 niveles | 12 claves</property>
+                                <property name="label">Árbol JSON: 0 niveles | 0 claves</property>
                                 <style>
                                   <class name="caption"/>
                                 </style>
@@ -721,9 +717,9 @@
                             </child>
                             <child>
                               <object class="GtkLabel" id="lbl_rfc_badge">
-                                <property name="label">Válido RFC 8259</property>
+                                <property name="label">Esperando entrada</property>
                                 <style>
-                                  <class name="badge-success"/>
+                                  <class name="badge-pill"/>
                                 </style>
                               </object>
                             </child>
@@ -833,7 +829,7 @@
                 </style>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">✓ Git: main   |   UTF-8   |   LF</property>
+                    <property name="label">UTF-8   |   LF</property>
                     <style>
                       <class name="caption"/>
                       <class name="dim-label"/>
@@ -848,7 +844,7 @@
                     <property name="halign">end</property>
                     <child>
                       <object class="GtkLabel" id="lbl_footer_diff_badge">
-                        <property name="label">+3  -2</property>
+                        <property name="label">+0  -0</property>
                         <style>
                           <class name="badge-pill"/>
                         </style>
