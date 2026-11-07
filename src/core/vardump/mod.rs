@@ -33,22 +33,26 @@ fn unescape_php_string(raw: &str) -> String {
 }
 
 /// Extracts a clean key from an `object_key` AST pair.
-fn parse_object_key(pair: Pair<Rule>) -> String {
+fn parse_object_key(pair: Pair<Rule>) -> (Option<i64>, String) {
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::quoted_key => {
                 if let Some(inner_key) = inner.into_inner().next() {
-                    return unescape_php_string(inner_key.as_str());
+                    return (None, unescape_php_string(inner_key.as_str()));
                 }
-                return String::new();
+                return (None, String::new());
             }
-            Rule::int_lit | Rule::identifier => {
-                return inner.as_str().to_string();
+            Rule::int_lit => {
+                let s = inner.as_str();
+                return (s.parse::<i64>().ok(), s.to_string());
+            }
+            Rule::identifier => {
+                return (None, inner.as_str().to_string());
             }
             _ => {}
         }
     }
-    String::new()
+    (None, String::new())
 }
 
 /// Extracts a clean key from an array `key` AST pair.
@@ -73,6 +77,28 @@ fn parse_array_key(pair: Pair<Rule>) -> (Option<i64>, String) {
     }
 }
 
+fn parse_printr_scalar(raw: &str) -> Value {
+    let s = raw.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("null") {
+        return Value::Null;
+    }
+    if s == "true" {
+        return Value::Bool(true);
+    }
+    if s == "false" {
+        return Value::Bool(false);
+    }
+    if let Ok(i) = s.parse::<i64>() {
+        return Value::Number(i.into());
+    }
+    if let Ok(f) = s.parse::<f64>() {
+        if let Some(num) = Number::from_f64(f) {
+            return Value::Number(num);
+        }
+    }
+    Value::String(s.to_string())
+}
+
 /// Recursively converts a Pest AST Pair into a `serde_json::Value`.
 fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
     match pair.as_rule() {
@@ -84,7 +110,6 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
             pair_to_value(value_pair)
         }
         Rule::value => {
-            // value contains an optional reference, followed by the actual value node
             let inner = pair
                 .into_inner()
                 .find(|p| p.as_rule() != Rule::reference)
@@ -163,7 +188,6 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
                 }
             }
 
-            // Check if this array is sequential 0..N-1
             let is_sequential = !entries.is_empty()
                 && entries
                     .iter()
@@ -193,13 +217,75 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
                         .next()
                         .ok_or_else(|| "Entrada de objeto sin valor".to_string())?;
 
-                    let key_str = parse_object_key(key_pair);
+                    let (_, key_str) = parse_object_key(key_pair);
                     let val = pair_to_value(val_pair)?;
                     map.insert(key_str, val);
                 }
             }
             Ok(Value::Object(map))
         }
+        Rule::printr_array => {
+            let mut entries: Vec<(Option<i64>, String, Value)> = Vec::new();
+            for item in pair.into_inner() {
+                if item.as_rule() == Rule::printr_entry {
+                    let mut entry_inner = item.into_inner();
+                    let key_pair = entry_inner
+                        .next()
+                        .ok_or_else(|| "Entrada print_r sin clave".to_string())?;
+                    let val_pair = entry_inner
+                        .next()
+                        .ok_or_else(|| "Entrada print_r sin valor".to_string())?;
+
+                    let (num_key, str_key) = parse_object_key(key_pair);
+                    let val = pair_to_value(val_pair)?;
+                    entries.push((num_key, str_key, val));
+                }
+            }
+
+            let is_sequential = !entries.is_empty()
+                && entries
+                    .iter()
+                    .enumerate()
+                    .all(|(idx, (num_opt, _, _))| *num_opt == Some(idx as i64));
+
+            if entries.is_empty() || is_sequential {
+                let vec: Vec<Value> = entries.into_iter().map(|(_, _, v)| v).collect();
+                Ok(Value::Array(vec))
+            } else {
+                let mut map = Map::new();
+                for (_, k, v) in entries {
+                    map.insert(k, v);
+                }
+                Ok(Value::Object(map))
+            }
+        }
+        Rule::printr_object => {
+            let mut map = Map::new();
+            for item in pair.into_inner() {
+                if item.as_rule() == Rule::printr_entry {
+                    let mut entry_inner = item.into_inner();
+                    let key_pair = entry_inner
+                        .next()
+                        .ok_or_else(|| "Entrada print_r objeto sin clave".to_string())?;
+                    let val_pair = entry_inner
+                        .next()
+                        .ok_or_else(|| "Entrada print_r objeto sin valor".to_string())?;
+
+                    let (_, key_str) = parse_object_key(key_pair);
+                    let val = pair_to_value(val_pair)?;
+                    map.insert(key_str, val);
+                }
+            }
+            Ok(Value::Object(map))
+        }
+        Rule::printr_value => {
+            if let Some(inner) = pair.into_inner().next() {
+                pair_to_value(inner)
+            } else {
+                Ok(Value::Null)
+            }
+        }
+        Rule::printr_scalar => Ok(parse_printr_scalar(pair.as_str())),
         Rule::resource_val => Ok(Value::String(pair.as_str().to_string())),
         Rule::recursion_val => Ok(Value::String("*RECURSION*".to_string())),
         Rule::uninitialized_val => Ok(Value::Null),
@@ -207,7 +293,7 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
     }
 }
 
-/// Parses a PHP `var_dump()` output string into a `serde_json::Value`.
+/// Parses a PHP `var_dump()` or `print_r()` output string into a `serde_json::Value`.
 pub fn parse_vardump(input: &str) -> Result<Value, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -224,7 +310,7 @@ pub fn parse_vardump(input: &str) -> Result<Value, String> {
     pair_to_value(root_pair)
 }
 
-/// Parses a PHP `var_dump()` output and formats it directly to a JSON string.
+/// Parses a PHP `var_dump()` or `print_r()` output and formats it directly to a JSON string.
 pub fn vardump_to_json_string(input: &str, pretty: bool) -> Result<String, String> {
     let val = parse_vardump(input)?;
     if pretty {
@@ -247,6 +333,8 @@ mod tests {
         assert_eq!(parse_vardump("bool(false)").unwrap(), Value::Bool(false));
         assert_eq!(parse_vardump("int(42)").unwrap(), Value::Number(42.into()));
         assert_eq!(parse_vardump("int(-15)").unwrap(), Value::Number((-15).into()));
+        assert_eq!(parse_vardump("float(0)").unwrap(), serde_json::json!(0.0));
+        assert_eq!(parse_vardump("double(128.45)").unwrap(), serde_json::json!(128.45));
         assert_eq!(
             parse_vardump(r#"string(5) "hello""#).unwrap(),
             Value::String("hello".to_string())
@@ -292,6 +380,7 @@ mod tests {
     #[test]
     fn test_nested_object_and_array() {
         let input = r#"
+            /var/www/html/app.php:24:
             object(App\User)#5 (2) {
                 ["id"]=>
                 int(1)
@@ -324,5 +413,29 @@ mod tests {
         let val = parse_vardump(input).unwrap();
         assert_eq!(val["secret"], "private");
         assert_eq!(val["token"], "xyz");
+    }
+
+    #[test]
+    fn test_printr_array_raw() {
+        let input = r#"
+Array
+(
+    [id] => usr_9f83a21
+    [quota_limit] => 4096
+    [active] => true
+    [roles] => Array
+        (
+            [0] => admin
+            [1] => systems-architect
+        )
+)
+        "#;
+        let val = parse_vardump(input).unwrap();
+        assert!(val.is_object());
+        assert_eq!(val["id"], "usr_9f83a21");
+        assert_eq!(val["quota_limit"], 4096);
+        assert_eq!(val["active"], true);
+        assert_eq!(val["roles"][0], "admin");
+        assert_eq!(val["roles"][1], "systems-architect");
     }
 }

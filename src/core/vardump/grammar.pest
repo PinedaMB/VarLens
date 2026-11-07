@@ -1,6 +1,8 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-root = { SOI ~ value ~ EOI }
+root = { SOI ~ xdebug_header? ~ value ~ EOI }
+
+xdebug_header = _{ ("/" | (ASCII_ALPHA ~ ":")) ~ (!("\r" | "\n") ~ ANY)* }
 
 value = {
     reference? ~ (
@@ -14,6 +16,8 @@ value = {
         | resource_val
         | recursion_val
         | uninitialized_val
+        | printr_array
+        | printr_object
     )
 }
 
@@ -27,12 +31,12 @@ bool_lit = { "true" | "false" }
 int_val = { "int(" ~ int_lit ~ ")" }
 int_lit = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
-float_val = { "float(" ~ float_lit ~ ")" }
+float_val = { ("float(" | "double(") ~ float_lit ~ ")" }
 float_lit = @{
     ("+" | "-")? ~ (
         ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
         | "." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
-        | ASCII_DIGIT+ ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
+        | ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
     )
     | ("+" | "-")? ~ "INF"
     | "NAN"
@@ -60,7 +64,7 @@ object_key = {
 visibility = { "public" | "protected" | "private" }
 quoted_key = ${ "\"" ~ inner_key ~ "\"" }
 inner_key = @{ ( "\\\"" | "\\\\" | (!"\"" ~ ANY) )* }
-identifier = @{ (ASCII_ALPHANUMERIC | "_" | "-")+ }
+identifier = @{ (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
 
 key = {
     int_lit
@@ -71,3 +75,10 @@ key = {
 resource_val = { "resource(" ~ ASCII_DIGIT+ ~ ") of type (" ~ (!")" ~ ANY)+ ~ ")" }
 recursion_val = { "*RECURSION*" }
 uninitialized_val = { "uninitialized(" ~ (!")" ~ ANY)+ ~ ")" }
+
+// Support for PHP print_r / Array raw format
+printr_array = { ^"Array" ~ "(" ~ printr_entry* ~ ")" }
+printr_object = { class_name ~ ^"Object" ~ "(" ~ printr_entry* ~ ")" }
+printr_entry = { "[" ~ object_key ~ "]" ~ "=>" ~ printr_value }
+printr_value = { printr_array | printr_object | printr_scalar? }
+printr_scalar = @{ !("[" | ")" | "\r" | "\n") ~ (!("\r" | "\n") ~ ANY)+ }
