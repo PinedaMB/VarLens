@@ -1,0 +1,51 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Sombra base GNOME HIG -->
+    <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+
+    <!-- Gradiente de la placa principal -->
+    <linearGradient id="basePlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3d3846" />
+      <stop offset="100%" stop-color="#241f31" />
+    </linearGradient>
+
+    <!-- Resaltado superior de borde (Highlight de 1px) -->
+    <linearGradient id="edgeHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sombra general del cuerpo -->
+  <rect x="20" y="18" width="88" height="96" rx="16" fill="#000000" opacity="0.3" filter="url(#drop-shadow)" />
+
+  <!-- Bloque principal redondeado (Placa base) -->
+  <rect x="20" y="16" width="88" height="96" rx="16" fill="url(#basePlate)" />
+  <rect x="20" y="16" width="88" height="96" rx="16" fill="none" stroke="url(#edgeHighlight)" stroke-width="1.5" />
+
+  <!-- Canal divisor central de diff -->
+  <line x1="64" y1="24" x2="64" y2="104" stroke="#1b1723" stroke-width="2" stroke-dasharray="4 2" />
+
+  <!-- Panel Izquierdo: Supresión / Formato viejo (Rojo GNOME) -->
+  <g id="diff-left">
+    <!-- Indicador de cambio suprimido / original -->
+    <rect x="28" y="32" width="28" height="6" rx="3" fill="#e01b24" />
+    <rect x="28" y="44" width="20" height="6" rx="3" fill="#c01c28" opacity="0.6" />
+    <!-- Glifo { estilizado en bajo relieve -->
+    <path d="M 44 60 C 40 60 38 62 38 66 L 38 70 C 38 73 35 74 33 75 C 35 76 38 77 38 80 L 38 84 C 38 88 40 90 44 90" fill="none" stroke="#ed333b" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  <!-- Panel Derecho: Adición / JSON limpio (Verde GNOME) -->
+  <g id="diff-right">
+    <!-- Indicador de cambio añadido / formateado -->
+    <rect x="72" y="32" width="28" height="6" rx="3" fill="#33d17a" />
+    <rect x="80" y="44" width="20" height="6" rx="3" fill="#2ec27e" opacity="0.8" />
+    <!-- Glifo } estilizado -->
+    <path d="M 84 60 C 88 60 90 62 90 66 L 90 70 C 90 73 93 74 95 75 C 93 76 90 77 90 80 L 90 84 C 90 88 88 90 84 90" fill="none" stroke="#57e389" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  <!-- Acabado superior: Bisel de luz superior -->
+  <path d="M 36 17 L 92 17" stroke="#ffffff" stroke-width="1" stroke-opacity="0.25" stroke-linecap="round" />
+</svg>

@@ -1,0 +1,73 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+root = { SOI ~ value ~ EOI }
+
+value = {
+    reference? ~ (
+        null_val
+        | bool_val
+        | float_val
+        | int_val
+        | string_val
+        | array_val
+        | object_val
+        | resource_val
+        | recursion_val
+        | uninitialized_val
+    )
+}
+
+reference = { "&" }
+
+null_val = { "NULL" }
+
+bool_val = { "bool(" ~ bool_lit ~ ")" }
+bool_lit = { "true" | "false" }
+
+int_val = { "int(" ~ int_lit ~ ")" }
+int_lit = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+float_val = { "float(" ~ float_lit ~ ")" }
+float_lit = @{
+    ("+" | "-")? ~ (
+        ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+        | "." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+        | ASCII_DIGIT+ ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
+    )
+    | ("+" | "-")? ~ "INF"
+    | "NAN"
+}
+
+string_val = { "string(" ~ length ~ ") " ~ quoted_string }
+length = @{ ASCII_DIGIT+ }
+quoted_string = ${ "\"" ~ inner_string ~ "\"" }
+inner_string = @{ ( "\\\"" | "\\\\" | (!"\"" ~ ANY) )* }
+
+array_val = { "array(" ~ length ~ ") {" ~ array_entry* ~ "}" }
+array_entry = { "[" ~ key ~ "]=>" ~ value }
+
+object_val = { "object(" ~ class_name ~ ")#" ~ object_id ~ ("(" ~ length ~ ")")? ~ "{" ~ object_entry* ~ "}" }
+class_name = @{ (ASCII_ALPHANUMERIC | "_" | "\\" | "@" | "$")+ }
+object_id = @{ ASCII_DIGIT+ }
+object_entry = { "[" ~ object_key ~ "]=>" ~ value }
+
+object_key = {
+    quoted_key ~ (":" ~ (quoted_key | class_name))? ~ (":" ~ visibility)?
+    | int_lit
+    | identifier
+}
+
+visibility = { "public" | "protected" | "private" }
+quoted_key = ${ "\"" ~ inner_key ~ "\"" }
+inner_key = @{ ( "\\\"" | "\\\\" | (!"\"" ~ ANY) )* }
+identifier = @{ (ASCII_ALPHANUMERIC | "_" | "-")+ }
+
+key = {
+    int_lit
+    | quoted_key
+    | identifier
+}
+
+resource_val = { "resource(" ~ ASCII_DIGIT+ ~ ") of type (" ~ (!")" ~ ANY)+ ~ ")" }
+recursion_val = { "*RECURSION*" }
+uninitialized_val = { "uninitialized(" ~ (!")" ~ ANY)+ ~ ")" }

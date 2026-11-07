@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.varlens.App</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>VarLens</name>
+  <summary>Herramienta para formatear JSON, parsear var_dump de PHP y comparar diffs</summary>
+  <description>
+    <p>
+      VarLens es una aplicación nativa para Linux desarrollada en Rust con GTK4 y Libadwaita.
+      Ofrece a los desarrolladores herramientas esenciales para la manipulación y análisis de datos:
+    </p>
+    <ul>
+      <li>Formateo y validación de JSON en modo legible (Prettify) o compacto (Minify).</li>
+      <li>Conversión de volcados PHP var_dump() complejos y anidados a formato JSON estructurado.</li>
+      <li>Comparador visual de diferencias lado a lado (Side-by-Side) con algoritmos Myers y Patience.</li>
+      <li>Concurrencia asíncrona no bloqueante para grandes archivos de texto.</li>
+    </ul>
+  </description>
+  <url type="homepage">https://github.com/varlens/varlens</url>
+  <launchable type="desktop-id">io.github.varlens.App.desktop</launchable>
+  <provides>
+    <binary>varlens</binary>
+  </provides>
+</component>

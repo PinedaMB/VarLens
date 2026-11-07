@@ -1,0 +1,16 @@
+[package]
+name = "varlens"
+version = "0.1.0"
+edition = "2021"
+authors = ["VarLens Developer"]
+description = "Linux native developer tool for JSON formatting, PHP var_dump parsing, and Diff viewing"
+
+[dependencies]
+gtk4 = { version = "0.11.5", features = ["v4_12"] }
+libadwaita = { version = "0.9.2", features = ["v1_5"] }
+sourceview5 = "0.11.2"
+similar = { version = "3.2.1", features = ["inline"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+pest = "2.9.5"
+pest_derive = "2.9.5"

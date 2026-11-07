@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=VarLens
+Comment=JSON Formatter, PHP var_dump Converter and Diff Tool
+Exec=varlens
+Icon=io.github.varlens.App
+Terminal=false
+Type=Application
+Categories=Development;Utility;TextEditor;
+StartupNotify=true
+Keywords=json;vardump;php;diff;formatter;development;
