@@ -2,7 +2,7 @@
 name = "varlens"
 version = "1.0.0"
 edition = "2021"
-authors = ["VarLens Developers"]
+authors = ["Brayan Pineda <https://github.com/PinedaMB>"]
 description = "Modern Linux native developer tool for JSON formatting, interactive tree exploration, PHP var_dump/print_r conversion, and AST diff comparison"
 license = "MIT"
 readme = "README.md"
@@ -29,8 +29,8 @@ strip = true
 
 [package.metadata.deb]
 name = "varlens"
-maintainer = "VarLens Developers <https://github.com/PinedaMB/VarLens>"
-copyright = "2026 VarLens Developers"
+maintainer = "Brayan Pineda <https://github.com/PinedaMB/VarLens>"
+copyright = "2026 Brayan Pineda"
 license-file = ["LICENSE", "4"]
 depends = "$auto, libgtk-4-1 (>= 4.12), libadwaita-1-0 (>= 1.5), libgtksourceview-5-0"
 section = "devel"

@@ -75,16 +75,16 @@ fn main() -> glib::ExitCode {
                 let about = adw::AboutDialog::builder()
                     .application_name("VarLens")
                     .application_icon("io.github.PinedaMB.VarLens")
-                    .developer_name("VarLens Team")
+                    .developer_name("Brayan Pineda")
                     .version("1.0.0")
                     .website("https://github.com/PinedaMB/VarLens")
                     .support_url("https://buymeacoffee.com/rainbowfacp")
                     .license_type(gtk4::License::MitX11)
                     .comments(tr!(
                         "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, explorar árboles de datos, convertir salidas de var_dump() y print_r() de PHP y comparar diffs visualmente.",
-                        "Native Linux developer tool for JSON formatting & validation, interactive tree exploration, PHP var_dump() and print_r() conversion, and visual diff inspection."
+                        "Native Linux developer tool for JSON formatting &amp; validation, interactive tree exploration, PHP var_dump() and print_r() conversion, and visual diff inspection."
                     ))
-                    .developers(vec!["VarLens Developers"])
+                    .developers(vec!["Brayan Pineda (PinedaMB)"])
                     .build();
                 about.present(active_win.as_ref());
             }

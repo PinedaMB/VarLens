@@ -14,7 +14,7 @@
     </section>
     <section>
       <item>
-        <attribute name="label" translatable="yes">Atajos del teclado</attribute>
+        <attribute name="label" translatable="yes">Atajos del teclado y detalles</attribute>
         <attribute name="action">win.show-help-overlay</attribute>
       </item>
       <item>

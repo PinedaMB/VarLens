@@ -811,6 +811,35 @@ impl VarDiffWindow {
             let action = gtk4::NamedAction::new("win.open-file");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
+        // Ctrl+Shift+F -> win.format-json
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>f") {
+            let action = gtk4::NamedAction::new("win.format-json");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+Shift+M -> win.minify-json
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>m") {
+            let action = gtk4::NamedAction::new("win.minify-json");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+Shift+C / Ctrl+Shift+J -> win.convert-vardump
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>c") {
+            let action = gtk4::NamedAction::new("win.convert-vardump");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>j") {
+            let action = gtk4::NamedAction::new("win.convert-vardump");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+Return -> win.compute-diff
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>Return") {
+            let action = gtk4::NamedAction::new("win.compute-diff");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+Shift+D -> win.clear-diff
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>d") {
+            let action = gtk4::NamedAction::new("win.clear-diff");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
         // Ctrl+[ -> win.diff-prev
         if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>bracketleft") {
             let action = gtk4::NamedAction::new("win.diff-prev");
@@ -819,6 +848,16 @@ impl VarDiffWindow {
         // Ctrl+] -> win.diff-next
         if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>bracketright") {
             let action = gtk4::NamedAction::new("win.diff-next");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // F1 -> win.show-help-overlay
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("F1") {
+            let action = gtk4::NamedAction::new("win.show-help-overlay");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+? -> win.show-help-overlay
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>question") {
+            let action = gtk4::NamedAction::new("win.show-help-overlay");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
 
@@ -1750,21 +1789,141 @@ impl VarDiffWindow {
     }
 
     fn show_help_dialog(&self) {
-        let dialog = adw::MessageDialog::builder()
-            .heading("Atajos del Teclado y Ayuda")
-            .body(
-                "• Ctrl+O: Abrir archivo en el panel activo\n\
-                 • Ctrl+[ / Ctrl+]: Navegar a la diferencia anterior o siguiente\n\
-                 • Formatear JSON: Sangría de 2/4 espacios o tabuladores y validación RFC 8259\n\
-                 • var_dump → JSON: Parsea volcados recursivos de PHP a JSON estructurado\n\
-                 • Comparador: Resaltado de línea y token (inline diff) con opción de ignorar espacios\n\
-                 • Hilos en 2do plano: Cargas mayores a 1000 líneas se procesan asíncronamente",
-            )
-            .transient_for(self)
+        let win = adw::Window::builder()
+            .title(tr!("Atajos de Teclado y Detalles", "Keyboard Shortcuts &amp; Details"))
             .modal(true)
+            .transient_for(self)
+            .default_width(620)
+            .default_height(640)
             .build();
-        dialog.add_response("ok", "Entendido");
-        dialog.set_default_response(Some("ok"));
-        dialog.present();
+
+        let toolbar_view = adw::ToolbarView::new();
+        let header = adw::HeaderBar::new();
+        toolbar_view.add_top_bar(&header);
+
+        let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 20);
+        content_box.set_margin_start(24);
+        content_box.set_margin_end(24);
+        content_box.set_margin_top(16);
+        content_box.set_margin_bottom(24);
+
+        // --- 1. Grupo Atajos del Teclado ---
+        let grp_shortcuts = adw::PreferencesGroup::builder()
+            .title(tr!("Atajos del Teclado", "Keyboard Shortcuts"))
+            .description(tr!("Accesos rápidos para aumentar tu productividad", "Quick keys to boost your productivity"))
+            .build();
+
+        let make_shortcut_row = |title: &str, subtitle: Option<&str>, accel: &str| {
+            let row = adw::ActionRow::builder()
+                .title(title)
+                .build();
+            if let Some(sub) = subtitle {
+                row.set_subtitle(sub);
+            }
+            let label = gtk4::ShortcutLabel::builder()
+                .accelerator(accel)
+                .valign(gtk4::Align::Center)
+                .build();
+            row.add_suffix(&label);
+            row
+        };
+
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Abrir archivo", "Open file"),
+            Some(tr!("Carga un archivo en el panel activo", "Load a file into active panel")),
+            "<Control>O",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Formatear documento", "Format document"),
+            Some(tr!("Indentación automática de JSON o XML", "Automatic JSON or XML indentation")),
+            "<Control><Shift>F",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Minificar documento", "Minify document"),
+            Some(tr!("Compacta el contenido a una sola línea", "Compact content into a single line")),
+            "<Control><Shift>M",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Convertir PHP var_dump", "Convert PHP var_dump"),
+            Some(tr!("Transforma volcados de array u objeto a JSON", "Transform array or object dumps into JSON")),
+            "<Control><Shift>C",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Recalcular diferencias", "Recalculate diff"),
+            Some(tr!("Actualiza la comparación entre ambos paneles", "Update comparison between diff panels")),
+            "<Control>Return",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Diferencia anterior / siguiente", "Previous / Next diff"),
+            Some(tr!("Salta entre bloques de diferencias", "Jump between diff chunks")),
+            "<Control>bracketleft",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Limpiar paneles de comparación", "Clear diff panels"),
+            None,
+            "<Control><Shift>D",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Ver atajos y ayuda", "Show shortcuts &amp; help"),
+            None,
+            "F1",
+        ));
+
+        content_box.append(&grp_shortcuts);
+
+        // --- 2. Grupo Detalles y Capacidades ---
+        let grp_features = adw::PreferencesGroup::builder()
+            .title(tr!("Detalles y Capacidades", "Features &amp; Details"))
+            .description(tr!("Puntos destacados de la arquitectura de VarLens", "Core architecture highlights of VarLens"))
+            .build();
+
+        let make_feature_row = |icon_name: &str, title: &str, subtitle: &str| {
+            let row = adw::ActionRow::builder()
+                .title(title)
+                .subtitle(subtitle)
+                .build();
+            let icon = gtk4::Image::from_icon_name(icon_name);
+            icon.set_icon_size(gtk4::IconSize::Large);
+            row.add_prefix(&icon);
+            row
+        };
+
+        grp_features.add(&make_feature_row(
+            "document-properties-symbolic",
+            tr!("Inspector de Datos", "Data Inspector"),
+            tr!("Validación RFC 8259 y W3C en tiempo real con conteo de nodos y profundidad.", "Real-time RFC 8259 &amp; W3C validation with node counts and depth."),
+        ));
+        grp_features.add(&make_feature_row(
+            "format-indent-more-symbolic",
+            tr!("Explorador de Árbol", "Tree Explorer"),
+            tr!("Navegación jerárquica con búsqueda interactiva y copia instantánea de rutas de acceso.", "Interactive hierarchical navigation with query filtering and 1-click path copy."),
+        ));
+        grp_features.add(&make_feature_row(
+            "text-x-generic-symbolic",
+            tr!("Parser PHP PEG", "PHP PEG Parser"),
+            tr!("Gramática robusta para arrays indexados, asociativos y objetos de var_dump() y print_r().", "Robust grammar for indexed/associative arrays and objects from var_dump() &amp; print_r()."),
+        ));
+        grp_features.add(&make_feature_row(
+            "edit-find-symbolic",
+            tr!("Comparador Visual", "Visual Comparator"),
+            tr!("Algoritmos Myers y Patience con resaltado de tokens a nivel de caracteres.", "Myers &amp; Patience algorithms with character-level token highlighting."),
+        ));
+        grp_features.add(&make_feature_row(
+            "security-high-symbolic",
+            tr!("Privacidad Total", "Zero-Cloud Privacy"),
+            tr!("Todo el procesamiento es 100% local en tu equipo, sin llamadas de red ni telemetría.", "100% local processing on your machine with zero network calls or telemetry."),
+        ));
+
+        content_box.append(&grp_features);
+
+        let scrolled = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vscrollbar_policy(gtk4::PolicyType::Automatic)
+            .child(&content_box)
+            .build();
+
+        toolbar_view.set_content(Some(&scrolled));
+        win.set_content(Some(&toolbar_view));
+        win.present();
     }
 }
