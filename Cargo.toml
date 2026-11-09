@@ -26,3 +26,28 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[package.metadata.deb]
+name = "varlens"
+maintainer = "VarLens Developers <https://github.com/varlens/varlens>"
+copyright = "2026 VarLens Developers"
+license-file = ["LICENSE", "4"]
+depends = "$auto, libgtk-4-1 (>= 4.12), libadwaita-1-0 (>= 1.5), libgtksourceview-5-0"
+section = "devel"
+priority = "optional"
+assets = [
+    ["target/release/varlens", "usr/bin/", "755"],
+    ["data/io.github.varlens.App.desktop", "usr/share/applications/", "644"],
+    ["data/icons/hicolor/scalable/apps/io.github.varlens.App.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/io.github.varlens.App.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["README.md", "usr/share/doc/varlens/README.md", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/varlens", dest = "/usr/bin/varlens", mode = "755" },
+    { source = "data/io.github.varlens.App.desktop", dest = "/usr/share/applications/io.github.varlens.App.desktop", mode = "644" },
+    { source = "data/icons/hicolor/scalable/apps/io.github.varlens.App.svg", dest = "/usr/share/icons/hicolor/scalable/apps/io.github.varlens.App.svg", mode = "644" },
+    { source = "data/io.github.varlens.App.metainfo.xml", dest = "/usr/share/metainfo/io.github.varlens.App.metainfo.xml", mode = "644" },
+]
+
