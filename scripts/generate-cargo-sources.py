@@ -32,7 +32,8 @@ def main():
     config = {
         "type": "inline",
         "contents": "[source.crates-io]\nreplace-with = \"vendored-sources\"\n\n[source.vendored-sources]\ndirectory = \"cargo-crates\"\n",
-        "dest-filename": ".cargo/config.toml"
+        "dest": ".cargo",
+        "dest-filename": "config.toml"
     }
     sources.append(config)
 
