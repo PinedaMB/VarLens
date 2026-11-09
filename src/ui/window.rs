@@ -2,7 +2,7 @@ use crate::core::diff::{compute_diff_ext, DiffSummary};
 use crate::core::json::{
     analyze_json, count_lines, format_json_with_indent, IndentStyle,
 };
-use crate::core::vardump::{parse_vardump, vardump_to_json_string};
+use crate::core::vardump::{is_printr_raw, parse_vardump, vardump_to_json_string};
 use crate::core::xml::{analyze_xml, format_xml_with_indent, xml_to_json_string};
 use crate::ui::editor::EditorView;
 use crate::ui::folding::FoldingController;
@@ -460,7 +460,7 @@ impl VarDiffWindow {
         imp.btn_mode_raw.connect_toggled(move |btn| {
             if btn.is_active() {
                 let imp = win_m_raw.imp();
-                Self::set_buffer_language(&imp.source_inspector.buffer(), "json");
+                Self::set_buffer_language(&imp.source_inspector.buffer(), "php");
                 win_m_raw.update_inspector_metrics();
             }
         });
@@ -948,6 +948,41 @@ impl VarDiffWindow {
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err_msg));
                 }
             }
+            if imp.btn_insp_view_tree.is_active() {
+                self.refresh_tree_view();
+            }
+            return;
+        }
+
+        if imp.btn_mode_raw.is_active() {
+            imp.btn_format_json.set_tooltip_text(Some("Formatear (Ctrl+Shift+F)"));
+            imp.btn_minify_json.set_tooltip_text(Some("Minificar"));
+            imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir Array raw → JSON"));
+
+            if parse_vardump(&text).is_ok() {
+                imp.lbl_syntax_valid.set_label("✓ Array raw Válido");
+                imp.lbl_syntax_valid.remove_css_class("badge-error");
+                imp.lbl_syntax_valid.add_css_class("badge-success");
+
+                imp.lbl_rfc_badge.set_label("print_r PHP Listo");
+                imp.lbl_rfc_badge.remove_css_class("badge-error");
+                imp.lbl_rfc_badge.add_css_class("badge-success");
+
+                let kb = text.len() as f64 / 1024.0;
+                imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
+                imp.lbl_tree_stats.set_label("Estructura PHP print_r / Array raw detectada");
+            } else {
+                imp.lbl_syntax_valid.set_label("✗ Array raw Inválido");
+                imp.lbl_syntax_valid.remove_css_class("badge-success");
+                imp.lbl_syntax_valid.add_css_class("badge-error");
+
+                imp.lbl_rfc_badge.set_label("Error sintáctico");
+                imp.lbl_rfc_badge.remove_css_class("badge-success");
+                imp.lbl_rfc_badge.add_css_class("badge-error");
+            }
+            if imp.btn_insp_view_tree.is_active() {
+                self.refresh_tree_view();
+            }
             return;
         }
 
@@ -976,6 +1011,9 @@ impl VarDiffWindow {
                 imp.lbl_rfc_badge.set_label("Error sintáctico");
                 imp.lbl_rfc_badge.remove_css_class("badge-success");
                 imp.lbl_rfc_badge.add_css_class("badge-error");
+            }
+            if imp.btn_insp_view_tree.is_active() {
+                self.refresh_tree_view();
             }
             return;
         }
@@ -1016,7 +1054,11 @@ impl VarDiffWindow {
                 }
                 if parse_vardump(&text).is_ok() {
                     Self::set_buffer_language(&buf, "php");
-                    imp.btn_mode_vardump.set_active(true);
+                    if is_printr_raw(&text) {
+                        imp.btn_mode_raw.set_active(true);
+                    } else {
+                        imp.btn_mode_vardump.set_active(true);
+                    }
                     return;
                 }
 
@@ -1482,9 +1524,12 @@ impl VarDiffWindow {
             return;
         }
 
+        let is_raw = imp.btn_mode_raw.is_active();
+        let mode_label = if is_raw { "Array raw" } else { "var_dump" };
+
         if lines > ASYNC_LINE_THRESHOLD {
             imp.lbl_inspector_status
-                .set_label(&format!("Parseando var_dump ({} líneas)...", lines));
+                .set_label(&format!("Parseando {} ({} líneas)...", mode_label, lines));
             imp.lbl_inspector_status.set_tooltip_text(None);
             let handles = glib::thread_guard::ThreadGuard::new(self.clone());
 
@@ -1492,7 +1537,7 @@ impl VarDiffWindow {
                 let res = match vardump_to_json_string(&text, true) {
                     Ok(json_str) => WorkerResult::InspectorFormatted {
                         text: json_str,
-                        message: "var_dump transformado exitosamente a JSON".to_string(),
+                        message: format!("{} transformado exitosamente a JSON", mode_label),
                     },
                     Err(e) => WorkerResult::Error(e),
                 };
@@ -1507,12 +1552,12 @@ impl VarDiffWindow {
                     Self::set_buffer_language(&buf, "json");
                     imp.btn_mode_json.set_active(true);
                     imp.lbl_inspector_status
-                        .set_label("var_dump convertido a JSON");
+                        .set_label(&format!("{} convertido a JSON", mode_label));
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
                 Err(err) => {
                     imp.lbl_inspector_status
-                        .set_label("Error: No es una estructura PHP var_dump válida");
+                        .set_label(&format!("Error: No es una estructura PHP {} válida", mode_label));
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err));
                 }
             }

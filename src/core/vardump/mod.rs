@@ -303,6 +303,27 @@ pub fn parse_vardump(input: &str) -> Result<Value, String> {
     pair_to_value(root_pair)
 }
 
+/// Returns true if the input corresponds to PHP `print_r()` / `Array raw` format.
+pub fn is_printr_raw(input: &str) -> bool {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if let Ok(mut pairs) = VarDumpParser::parse(Rule::root, trimmed) {
+        if let Some(root_pair) = pairs.next() {
+            if let Some(value_pair) = root_pair.into_inner().find(|p| p.as_rule() == Rule::value) {
+                if let Some(inner) = value_pair.into_inner().find(|p| p.as_rule() != Rule::reference) {
+                    return inner.as_rule() == Rule::printr_array || inner.as_rule() == Rule::printr_object;
+                }
+            }
+        }
+    }
+    let trimmed_start = trimmed.trim_start();
+    (trimmed_start.starts_with("Array") && !trimmed_start.starts_with("array(") && !trimmed_start.starts_with("array ("))
+        || (trimmed_start.starts_with('[') && trimmed_start.contains("=>") && !trimmed_start.contains("string("))
+        || trimmed_start.starts_with("stdClass Object")
+}
+
 /// Parses a PHP `var_dump()` or `print_r()` output and formats it directly to a JSON string.
 pub fn vardump_to_json_string(input: &str, pretty: bool) -> Result<String, String> {
     let val = parse_vardump(input)?;
@@ -423,6 +444,7 @@ Array
         )
 )
         "#;
+        assert!(is_printr_raw(input));
         let val = parse_vardump(input).unwrap();
         assert!(val.is_object());
         assert_eq!(val["id"], "usr_9f83a21");
@@ -430,5 +452,13 @@ Array
         assert_eq!(val["active"], true);
         assert_eq!(val["roles"][0], "admin");
         assert_eq!(val["roles"][1], "systems-architect");
+
+        let vardump_input = r#"
+            array(1) {
+                ["id"]=>
+                string(11) "usr_9f83a21"
+            }
+        "#;
+        assert!(!is_printr_raw(vardump_input));
     }
 }

@@ -230,20 +230,17 @@ impl JsonTreeView {
         toolbar.set_margin_bottom(4);
 
         let btn_expand_all = gtk4::Button::builder()
-            .icon_name("zoom-in-symbolic")
-            .label("Expandir todo")
+            .icon_name("view-fullscreen-symbolic")
             .tooltip_text("Desplegar y expandir todos los nodos")
             .build();
 
         let btn_collapse_all = gtk4::Button::builder()
-            .icon_name("zoom-out-symbolic")
-            .label("Colapsar todo")
+            .icon_name("view-restore-symbolic")
             .tooltip_text("Colapsar y contraer todos los nodos")
             .build();
 
         let btn_copy_path = gtk4::Button::builder()
             .icon_name("edit-copy-symbolic")
-            .label("Copiar ruta")
             .tooltip_text("Copiar ruta de acceso (ej. array[0].HotelCode)")
             .build();
 
