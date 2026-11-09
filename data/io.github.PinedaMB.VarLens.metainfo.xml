@@ -32,15 +32,15 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/tree-view.png</image>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/tree-view.png</image>
       <caption>Interactive JSON Tree exploration and live node filtering</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/diff-view.png</image>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/diff-view.png</image>
       <caption>Side-by-side visual diff comparator with token highlighting</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/inspector-vardump.png</image>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/inspector-vardump.png</image>
       <caption>PHP var_dump and print_r raw array parser</caption>
     </screenshot>
   </screenshots>
