@@ -8,6 +8,12 @@
   <menu id="primary_menu">
     <section>
       <item>
+        <attribute name="label" translatable="yes">Apoyar proyecto ❤️</attribute>
+        <attribute name="action">app.sponsor</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
         <attribute name="label" translatable="yes">Atajos del teclado</attribute>
         <attribute name="action">win.show-help-overlay</attribute>
       </item>

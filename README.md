@@ -12,6 +12,7 @@
 [![Libadwaita](https://img.shields.io/badge/libadwaita-1.5+-purple.svg)](https://gnome.pages.gitlab.gnome.org/libadwaita)
 [![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](https://kernel.org)
 [![License](https://img.shields.io/badge/license-MIT-informational.svg)](LICENSE)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-rainbowfacp-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/rainbowfacp)
 
 </div>
 
@@ -179,6 +180,21 @@ update-desktop-database ~/.local/share/applications
 
 Contributions, bug reports, and suggestions are welcome!
 Feel free to open an issue or submit a pull request on [GitHub](https://github.com/PinedaMB/VarLens).
+
+---
+
+## 💖 Support the Project
+
+VarLens is 100% free and open-source software built with dedication. If VarLens saves you time, simplifies your debugging, or enhances your daily development workflow, consider supporting its ongoing maintenance and new features:
+
+<p align="left">
+  <a href="https://buymeacoffee.com/rainbowfacp">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="190" alt="Buy Me A Coffee" />
+  </a>
+</p>
+
+- **[Buy Me a Coffee](https://buymeacoffee.com/rainbowfacp)** — Buy a coffee to support development.
+- **Star the Repository** — A star on [GitHub](https://github.com/PinedaMB/VarLens) helps other Linux developers discover VarLens!
 
 ---
 

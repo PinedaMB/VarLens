@@ -23,6 +23,7 @@
     </ul>
   </description>
   <url type="homepage">https://github.com/PinedaMB/VarLens</url>
+  <url type="donation">https://buymeacoffee.com/rainbowfacp</url>
   <launchable type="desktop-id">io.github.PinedaMB.VarLens.desktop</launchable>
   <provides>
     <binary>varlens</binary>

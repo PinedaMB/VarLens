@@ -58,6 +58,14 @@ fn main() -> glib::ExitCode {
             );
         }
 
+        // Action: app.sponsor
+        let act_sponsor = gio::SimpleAction::new("sponsor", None);
+        act_sponsor.connect_activate(|_, _| {
+            let launcher = gtk4::UriLauncher::new("https://buymeacoffee.com/rainbowfacp");
+            launcher.launch(gtk4::Window::NONE, gio::Cancellable::NONE, |_| {});
+        });
+        app.add_action(&act_sponsor);
+
         // Action: app.about
         let act_about = gio::SimpleAction::new("about", None);
         let app_weak = app.downgrade();
@@ -70,6 +78,7 @@ fn main() -> glib::ExitCode {
                     .developer_name("VarLens Team")
                     .version("1.0.0")
                     .website("https://github.com/PinedaMB/VarLens")
+                    .support_url("https://buymeacoffee.com/rainbowfacp")
                     .license_type(gtk4::License::MitX11)
                     .comments(tr!(
                         "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, explorar árboles de datos, convertir salidas de var_dump() y print_r() de PHP y comparar diffs visualmente.",
