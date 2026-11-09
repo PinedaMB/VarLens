@@ -27,7 +27,9 @@ jobs:
             libgtksourceview-5-dev \
             build-essential \
             pkg-config \
-            rpm
+            rpm \
+            file \
+            libfuse2t64 || sudo apt-get install -y libfuse2 || true
 
       - name: Install Cargo Packaging Tools
         run: |

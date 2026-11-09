@@ -46,8 +46,10 @@ if ! command -v appimagetool >/dev/null 2>&1; then
     echo "Downloading appimagetool..."
     wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
     chmod +x appimagetool
-    ARCH=x86_64 ./appimagetool "$APP_DIR" "$OUTPUT"
-    rm -f appimagetool
+    echo "Extracting appimagetool (bypassing FUSE requirement)..."
+    ./appimagetool --appimage-extract >/dev/null
+    ARCH=x86_64 ./squashfs-root/AppRun "$APP_DIR" "$OUTPUT"
+    rm -rf squashfs-root appimagetool
 else
     ARCH=x86_64 appimagetool "$APP_DIR" "$OUTPUT"
 fi
