@@ -4,6 +4,8 @@ use crate::core::json::{
 };
 use crate::core::vardump::{is_printr_raw, parse_vardump, vardump_to_json_string};
 use crate::core::xml::{analyze_xml, format_xml_with_indent, xml_to_json_string};
+use crate::i18n::{self, Language};
+use crate::tr;
 use crate::ui::editor::EditorView;
 use crate::ui::folding::FoldingController;
 use gtk4::gdk;
@@ -44,24 +46,60 @@ mod imp {
     pub struct VarDiffWindow {
         #[template_child]
         pub main_stack: TemplateChild<adw::ViewStack>,
+        #[template_child]
+        pub page_diff: TemplateChild<adw::ViewStackPage>,
+        #[template_child]
+        pub page_inspector: TemplateChild<adw::ViewStackPage>,
+        #[template_child]
+        pub page_preferences: TemplateChild<adw::ViewStackPage>,
+
+        // Top Header widgets
+        #[template_child]
+        pub btn_open: TemplateChild<gtk4::Button>,
 
         // Diff page widgets
         #[template_child]
         pub diff_paned: TemplateChild<gtk4::Paned>,
         #[template_child]
+        pub btn_diff_prev: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_diff_next: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_run_diff: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_clear_diff: TemplateChild<gtk4::Button>,
+        #[template_child]
         pub source_diff_left: TemplateChild<crate::ui::diff_editor::VarLensDiffView>,
         #[template_child]
         pub source_diff_right: TemplateChild<crate::ui::diff_editor::VarLensDiffView>,
         #[template_child]
+        pub lbl_title_original: TemplateChild<gtk4::Label>,
+        #[template_child]
+        pub lbl_title_modified: TemplateChild<gtk4::Label>,
+        #[template_child]
         pub lbl_left_file: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_right_file: TemplateChild<gtk4::Label>,
+        #[template_child]
+        pub btn_copy_left: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_paste_left: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_load_left: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_copy_right: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_paste_right: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_load_right: TemplateChild<gtk4::Button>,
         #[template_child]
         pub lbl_diff_count: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_detect_mode: TemplateChild<gtk4::Label>,
         #[template_child]
         pub sw_ignore_whitespace: TemplateChild<gtk4::Switch>,
+        #[template_child]
+        pub lbl_ignore_whitespace: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_diff_removals: TemplateChild<gtk4::Label>,
         #[template_child]
@@ -82,6 +120,8 @@ mod imp {
         pub btn_paste_inspector: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_copy_inspector: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_clear_inspector: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_format_json: TemplateChild<gtk4::Button>,
         #[template_child]
@@ -123,6 +163,12 @@ mod imp {
 
         // Preferences widgets
         #[template_child]
+        pub grp_pref_general: TemplateChild<adw::PreferencesGroup>,
+        #[template_child]
+        pub pref_language: TemplateChild<adw::ComboRow>,
+        #[template_child]
+        pub grp_pref_editor: TemplateChild<adw::PreferencesGroup>,
+        #[template_child]
         pub pref_line_numbers: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub pref_minimap: TemplateChild<adw::SwitchRow>,
@@ -130,6 +176,8 @@ mod imp {
         pub pref_highlight_line: TemplateChild<adw::SwitchRow>,
         #[template_child]
         pub pref_word_wrap: TemplateChild<adw::SwitchRow>,
+        #[template_child]
+        pub grp_pref_diff: TemplateChild<adw::PreferencesGroup>,
         #[template_child]
         pub pref_patience: TemplateChild<adw::SwitchRow>,
 
@@ -335,8 +383,8 @@ impl VarDiffWindow {
         self.setup_actions();
         self.setup_shortcuts();
 
-        // 10. Start with clean editors and initialize metrics
-        self.update_inspector_metrics();
+        // 10. Start with clean editors and initialize metrics & language texts
+        self.update_ui_texts();
     }
 
     fn set_buffer_language(buf: &gtk4::TextBuffer, lang_id: &str) {
@@ -567,6 +615,98 @@ impl VarDiffWindow {
         imp.pref_patience.connect_active_notify(move |_| {
             win_p_pat.handle_compute_diff();
         });
+
+        // Language preference change signal
+        let win_p_lang = self.clone();
+        imp.pref_language.set_selected(i18n::current_language().as_u8() as u32);
+        imp.pref_language.connect_selected_notify(move |row| {
+            let sel = row.selected();
+            let new_lang = Language::from_u8(sel as u8);
+            if new_lang != i18n::current_language() {
+                i18n::set_language(new_lang);
+                win_p_lang.update_ui_texts();
+            }
+        });
+    }
+
+    pub fn update_ui_texts(&self) {
+        let imp = self.imp();
+
+        // 1. Stack page titles
+        imp.page_diff.set_title(Some(tr!("Comparador", "Diff Viewer")));
+        imp.page_inspector.set_title(Some(tr!("Inspector", "Inspector")));
+        imp.page_preferences.set_title(Some(tr!("Preferencias", "Preferences")));
+
+        // 2. Headerbar
+        imp.btn_open.set_label(tr!("Abrir", "Open"));
+        imp.btn_open.set_tooltip_text(Some(tr!("Abrir archivo (Ctrl+O)", "Open file (Ctrl+O)")));
+
+        // 3. Diff controls
+        imp.btn_diff_prev.set_label(tr!("Anterior", "Previous"));
+        imp.btn_diff_prev.set_tooltip_text(Some(tr!("Diferencia anterior (Ctrl+[)", "Previous difference (Ctrl+[)")));
+        imp.btn_diff_next.set_label(tr!("Siguiente", "Next"));
+        imp.btn_diff_next.set_tooltip_text(Some(tr!("Siguiente diferencia (Ctrl+])", "Next difference (Ctrl+])")));
+        imp.btn_run_diff.set_label(tr!("Comparar", "Compare"));
+        imp.btn_run_diff.set_tooltip_text(Some(tr!("Recalcular diferencias", "Recalculate differences")));
+        imp.btn_clear_diff.set_label(tr!("Limpiar", "Clear"));
+        imp.lbl_ignore_whitespace.set_label(tr!("Ignorar espacios", "Ignore whitespace"));
+
+        imp.lbl_title_original.set_label(tr!("Original (Base)", "Original (Base)"));
+        imp.lbl_title_modified.set_label(tr!("Modificado (Nuevo)", "Modified (New)"));
+        imp.btn_copy_left.set_tooltip_text(Some(tr!("Copiar código original", "Copy original code")));
+        imp.btn_paste_left.set_tooltip_text(Some(tr!("Pegar del portapapeles", "Paste from clipboard")));
+        imp.btn_load_left.set_tooltip_text(Some(tr!("Cargar archivo base", "Load base file")));
+        imp.btn_copy_right.set_tooltip_text(Some(tr!("Copiar código nuevo", "Copy modified code")));
+        imp.btn_paste_right.set_tooltip_text(Some(tr!("Pegar del portapapeles", "Paste from clipboard")));
+        imp.btn_load_right.set_tooltip_text(Some(tr!("Cargar archivo modificado", "Load modified file")));
+        imp.lbl_detect_mode.set_label(tr!("Detectar: Auto (JSON, XML, var_dump)", "Detect: Auto (JSON, XML, var_dump)"));
+
+        // 4. Inspector controls
+        imp.btn_paste_inspector.set_tooltip_text(Some(tr!("Pegar", "Paste")));
+        imp.btn_copy_inspector.set_tooltip_text(Some(tr!("Copiar", "Copy")));
+        imp.btn_clear_inspector.set_tooltip_text(Some(tr!("Limpiar contenido", "Clear content")));
+        imp.btn_insp_view_code.set_tooltip_text(Some(tr!("Vista de Código / Editor", "Code / Editor View")));
+        imp.btn_insp_view_tree.set_tooltip_text(Some(tr!("Vista de Árbol Interactivo (Explorar nodos)", "Interactive Tree View (Explore nodes)")));
+
+        // Indent dropdown
+        let current_indent = imp.dd_indent.selected();
+        let indent_model = gtk4::StringList::new(&[
+            tr!("Indentación: 2 Espacios", "Indentation: 2 Spaces"),
+            tr!("Indentación: 4 Espacios", "Indentation: 4 Spaces"),
+            tr!("Indentación: Tabuladores", "Indentation: Tabs"),
+        ]);
+        imp.dd_indent.set_model(Some(&indent_model));
+        imp.dd_indent.set_selected(current_indent);
+
+        // 5. Preferences
+        imp.grp_pref_general.set_title(tr!("General / Idioma", "General / Language"));
+        imp.grp_pref_general.set_description(Some(tr!("Ajustes globales de la interfaz", "Global interface settings")));
+        imp.pref_language.set_title(tr!("Idioma de la interfaz", "Interface language"));
+        imp.pref_language.set_subtitle(tr!("Selecciona el idioma (Español / English)", "Select language (Español / English)"));
+
+        imp.grp_pref_editor.set_title(tr!("Editor de Código", "Code Editor"));
+        imp.grp_pref_editor.set_description(Some(tr!("Personaliza la visualización de los editores GtkSourceView", "Customize GtkSourceView editors display")));
+        imp.pref_line_numbers.set_title(tr!("Mostrar números de línea", "Show line numbers"));
+        imp.pref_minimap.set_title(tr!("Mostrar minimapa en el Inspector", "Show minimap in Inspector"));
+        imp.pref_highlight_line.set_title(tr!("Resaltar línea actual", "Highlight current line"));
+        imp.pref_word_wrap.set_title(tr!("Ajuste automático de línea (Word Wrap)", "Automatic word wrap"));
+
+        imp.grp_pref_diff.set_title(tr!("Motor de Diferencias (Diff Engine)", "Diff Engine"));
+        imp.grp_pref_diff.set_description(Some(tr!("Ajustes del algoritmo de comparación del crate similar", "Comparison algorithm settings from similar crate")));
+        imp.pref_patience.set_title(tr!("Algoritmo Patience", "Patience Algorithm"));
+        imp.pref_patience.set_subtitle(tr!(
+            "Produce diffs más semánticos para estructuras JSON y código fuente",
+            "Produces more semantic diffs for JSON structures and source code"
+        ));
+
+        // 6. Tree View
+        if let Some(tree) = imp.json_tree.get() {
+            tree.update_language();
+        }
+
+        // 7. Refresh metrics and diff displays
+        self.update_inspector_metrics();
+        self.handle_compute_diff();
     }
 
     fn setup_minimap(&self) {
@@ -895,52 +1035,61 @@ impl VarDiffWindow {
         let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
 
         if text.trim().is_empty() {
-            imp.lbl_syntax_valid.set_label("Editor vacío");
-            imp.lbl_node_count.set_label("0 nodos");
+            imp.lbl_syntax_valid.set_label(tr!("Listo", "Ready"));
+            imp.lbl_node_count.set_label(&format!("0 {}", tr!("nodos", "nodes")));
             imp.lbl_payload_size.set_label("0 B");
-            imp.lbl_tree_stats.set_label("Árbol: 0 niveles | 0 elementos");
-            imp.lbl_inspector_status.set_label("Listo");
+            imp.lbl_tree_stats.set_label(&format!(
+                "{}: 0 {} | 0 {}",
+                tr!("Árbol", "Tree"),
+                tr!("niveles", "levels"),
+                tr!("elementos", "items")
+            ));
+            imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
             imp.lbl_inspector_status.set_tooltip_text(None);
-            imp.btn_format_json.set_tooltip_text(Some("Formatear (Ctrl+Shift+F)"));
-            imp.btn_minify_json.set_tooltip_text(Some("Minificar"));
-            imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir a JSON"));
+            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
+            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
+            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir a JSON", "Convert to JSON")));
             return;
         }
 
         if imp.btn_mode_xml.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some("Formatear XML (Ctrl+Shift+F)"));
-            imp.btn_minify_json.set_tooltip_text(Some("Minificar XML"));
-            imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir XML → JSON"));
+            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear XML (Ctrl+Shift+F)", "Format XML (Ctrl+Shift+F)")));
+            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar XML", "Minify XML")));
+            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir XML → JSON", "Convert XML → JSON")));
 
             match analyze_xml(&text) {
                 Ok(metrics) => {
                     if imp.lbl_inspector_status.label().as_str().starts_with("Error:") {
-                        imp.lbl_inspector_status.set_label("Listo");
+                        imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
                         imp.lbl_inspector_status.set_tooltip_text(None);
                     }
 
-                    imp.lbl_syntax_valid.set_label("✓ XML Válido");
+                    imp.lbl_syntax_valid.set_label(tr!("✓ XML Válido", "✓ Valid XML"));
                     imp.lbl_syntax_valid.remove_css_class("badge-error");
                     imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                    imp.lbl_rfc_badge.set_label("Válido W3C XML");
+                    imp.lbl_rfc_badge.set_label(tr!("Válido W3C XML", "W3C XML Valid"));
                     imp.lbl_rfc_badge.remove_css_class("badge-error");
                     imp.lbl_rfc_badge.add_css_class("badge-success");
 
                     imp.lbl_node_count
-                        .set_label(&format!("{} elementos", metrics.total_elements));
+                        .set_label(&format!("{} {}", metrics.total_elements, tr!("elementos", "elements")));
                     imp.lbl_payload_size.set_label(&metrics.formatted_size());
                     imp.lbl_tree_stats.set_label(&format!(
-                        "Árbol XML: {} niveles | {} atributos",
-                        metrics.max_depth, metrics.total_attributes
+                        "{}: {} {} | {} {}",
+                        tr!("Árbol XML", "XML Tree"),
+                        metrics.max_depth,
+                        tr!("niveles", "levels"),
+                        metrics.total_attributes,
+                        tr!("atributos", "attributes")
                     ));
                 }
                 Err(err_msg) => {
-                    imp.lbl_syntax_valid.set_label("✗ XML Inválido");
+                    imp.lbl_syntax_valid.set_label(tr!("✗ XML Inválido", "✗ Invalid XML"));
                     imp.lbl_syntax_valid.remove_css_class("badge-success");
                     imp.lbl_syntax_valid.add_css_class("badge-error");
 
-                    imp.lbl_rfc_badge.set_label("Error sintáctico");
+                    imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
                     imp.lbl_rfc_badge.remove_css_class("badge-success");
                     imp.lbl_rfc_badge.add_css_class("badge-error");
 
@@ -955,28 +1104,31 @@ impl VarDiffWindow {
         }
 
         if imp.btn_mode_raw.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some("Formatear (Ctrl+Shift+F)"));
-            imp.btn_minify_json.set_tooltip_text(Some("Minificar"));
-            imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir Array raw → JSON"));
+            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
+            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
+            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir Array raw → JSON", "Convert Array raw → JSON")));
 
             if parse_vardump(&text).is_ok() {
-                imp.lbl_syntax_valid.set_label("✓ Array raw Válido");
+                imp.lbl_syntax_valid.set_label(tr!("✓ Array raw Válido", "✓ Valid Array raw"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                imp.lbl_rfc_badge.set_label("print_r PHP Listo");
+                imp.lbl_rfc_badge.set_label(tr!("print_r PHP Listo", "PHP print_r Ready"));
                 imp.lbl_rfc_badge.remove_css_class("badge-error");
                 imp.lbl_rfc_badge.add_css_class("badge-success");
 
                 let kb = text.len() as f64 / 1024.0;
                 imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label("Estructura PHP print_r / Array raw detectada");
+                imp.lbl_tree_stats.set_label(tr!(
+                    "Estructura PHP print_r / Array raw detectada",
+                    "PHP print_r / Array raw structure detected"
+                ));
             } else {
-                imp.lbl_syntax_valid.set_label("✗ Array raw Inválido");
+                imp.lbl_syntax_valid.set_label(tr!("✗ Array raw Inválido", "✗ Invalid Array raw"));
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
 
-                imp.lbl_rfc_badge.set_label("Error sintáctico");
+                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
                 imp.lbl_rfc_badge.remove_css_class("badge-success");
                 imp.lbl_rfc_badge.add_css_class("badge-error");
             }
@@ -987,28 +1139,31 @@ impl VarDiffWindow {
         }
 
         if imp.btn_mode_vardump.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some("Formatear (Ctrl+Shift+F)"));
-            imp.btn_minify_json.set_tooltip_text(Some("Minificar"));
-            imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir var_dump → JSON"));
+            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
+            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
+            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir var_dump → JSON", "Convert var_dump → JSON")));
 
             if parse_vardump(&text).is_ok() {
-                imp.lbl_syntax_valid.set_label("✓ var_dump Válido");
+                imp.lbl_syntax_valid.set_label(tr!("✓ var_dump Válido", "✓ Valid var_dump"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                imp.lbl_rfc_badge.set_label("AST PHP Listo");
+                imp.lbl_rfc_badge.set_label(tr!("AST PHP Listo", "PHP AST Ready"));
                 imp.lbl_rfc_badge.remove_css_class("badge-error");
                 imp.lbl_rfc_badge.add_css_class("badge-success");
 
                 let kb = text.len() as f64 / 1024.0;
                 imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label("Estructura PHP var_dump detectada");
+                imp.lbl_tree_stats.set_label(tr!(
+                    "Estructura PHP var_dump detectada",
+                    "PHP var_dump structure detected"
+                ));
             } else {
-                imp.lbl_syntax_valid.set_label("✗ var_dump Inválido");
+                imp.lbl_syntax_valid.set_label(tr!("✗ var_dump Inválido", "✗ Invalid var_dump"));
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
 
-                imp.lbl_rfc_badge.set_label("Error sintáctico");
+                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
                 imp.lbl_rfc_badge.remove_css_class("badge-success");
                 imp.lbl_rfc_badge.add_css_class("badge-error");
             }
@@ -1021,28 +1176,32 @@ impl VarDiffWindow {
         match analyze_json(&text) {
             Ok(metrics) => {
                 if imp.lbl_inspector_status.label().as_str().starts_with("Error:") {
-                    imp.lbl_inspector_status.set_label("Listo");
+                    imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
 
-                imp.btn_format_json.set_tooltip_text(Some("Formatear JSON (Ctrl+Shift+F)"));
-                imp.btn_minify_json.set_tooltip_text(Some("Minificar JSON"));
-                imp.btn_vardump_to_json.set_tooltip_text(Some("Convertir a JSON"));
+                imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear JSON (Ctrl+Shift+F)", "Format JSON (Ctrl+Shift+F)")));
+                imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar JSON", "Minify JSON")));
+                imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir a JSON", "Convert to JSON")));
 
-                imp.lbl_syntax_valid.set_label("✓ Sintaxis Válida");
+                imp.lbl_syntax_valid.set_label(tr!("✓ Sintaxis Válida", "✓ Valid Syntax"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                imp.lbl_rfc_badge.set_label("Válido RFC 8259");
+                imp.lbl_rfc_badge.set_label(tr!("Válido RFC 8259", "RFC 8259 Valid"));
                 imp.lbl_rfc_badge.remove_css_class("badge-error");
                 imp.lbl_rfc_badge.add_css_class("badge-success");
 
                 imp.lbl_node_count
-                    .set_label(&format!("{} nodos", metrics.total_nodes));
+                    .set_label(&format!("{} {}", metrics.total_nodes, tr!("nodos", "nodes")));
                 imp.lbl_payload_size.set_label(&metrics.formatted_size());
                 imp.lbl_tree_stats.set_label(&format!(
-                    "Árbol: {} niveles | {} claves",
-                    metrics.max_depth, metrics.total_keys
+                    "{}: {} {} | {} {}",
+                    tr!("Árbol", "Tree"),
+                    metrics.max_depth,
+                    tr!("niveles", "levels"),
+                    metrics.total_keys,
+                    tr!("claves", "keys")
                 ));
             }
             Err(err_loc) => {
@@ -1062,7 +1221,7 @@ impl VarDiffWindow {
                     return;
                 }
 
-                imp.lbl_syntax_valid.set_label("✗ Sintaxis Inválida");
+                imp.lbl_syntax_valid.set_label(tr!("✗ Sintaxis Inválida", "✗ Invalid Syntax"));
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
 
@@ -1122,7 +1281,7 @@ impl VarDiffWindow {
 
     fn handle_open_file_target(&self, target: FileTarget) {
         let file_dialog = gtk4::FileDialog::builder()
-            .title("Abrir archivo")
+            .title(tr!("Abrir archivo", "Open file"))
             .modal(true)
             .build();
 
@@ -1169,8 +1328,10 @@ impl VarDiffWindow {
                                     imp.source_inspector.buffer().set_text(&text);
                                     imp.lbl_inspector_file.set_label(&filename);
                                     imp.lbl_inspector_status.set_label(&format!(
-                                        "Archivo cargado: {} líneas",
-                                        count_lines(&text)
+                                        "{}: {} {}",
+                                        tr!("Archivo cargado", "File loaded"),
+                                        count_lines(&text),
+                                        tr!("líneas", "lines")
                                     ));
                                 }
                             }
@@ -1365,17 +1526,19 @@ impl VarDiffWindow {
             }
         }
 
-        let count_label = if summary.hunk_count == 1 {
-            "1 diferencia encontrada".to_string()
+        let count_label = if summary.hunk_count == 0 {
+            tr!("Sin diferencias", "No differences").to_string()
+        } else if summary.hunk_count == 1 {
+            tr!("1 diferencia encontrada", "1 difference found").to_string()
         } else {
-            format!("{} diferencias encontradas", summary.hunk_count)
+            format!("{} {}", summary.hunk_count, tr!("diferencias encontradas", "differences found"))
         };
         imp.lbl_diff_count.set_label(&count_label);
 
         imp.lbl_diff_removals
-            .set_label(&format!("{} supresiones (-)", summary.deletions));
+            .set_label(&format!("{} {}", summary.deletions, tr!("supresiones (-)", "deletions (-)")));
         imp.lbl_diff_additions
-            .set_label(&format!("{} adiciones (+)", summary.insertions));
+            .set_label(&format!("{} {}", summary.insertions, tr!("adiciones (+)", "additions (+)")));
         imp.lbl_footer_diff_badge
             .set_label(&format!("+{}  -{}", summary.insertions, summary.deletions));
 
@@ -1491,7 +1654,7 @@ impl VarDiffWindow {
         let lines = count_lines(&text);
 
         if text.trim().is_empty() {
-            imp.lbl_inspector_status.set_label("El editor está vacío");
+            imp.lbl_inspector_status.set_label(tr!("El editor está vacío", "Editor is empty"));
             imp.lbl_inspector_status.set_tooltip_text(None);
             return;
         }
@@ -1504,12 +1667,12 @@ impl VarDiffWindow {
                     Self::set_buffer_language(&buf, "json");
                     imp.btn_mode_json.set_active(true);
                     imp.lbl_inspector_status
-                        .set_label("XML transformado exitosamente a JSON");
+                        .set_label(tr!("XML transformado exitosamente a JSON", "XML successfully converted to JSON"));
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
                 Err(err) => {
                     imp.lbl_inspector_status
-                        .set_label("Error: No es un XML válido para convertir a JSON");
+                        .set_label(tr!("Error: No es un XML válido para convertir a JSON", "Error: Not a valid XML to convert to JSON"));
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err));
                 }
             }
@@ -1519,7 +1682,7 @@ impl VarDiffWindow {
         // Si ya es un JSON válido, informar amablemente al usuario
         if serde_json::from_str::<serde_json::Value>(&text).is_ok() {
             imp.lbl_inspector_status
-                .set_label("El contenido ya es JSON válido (no requiere conversión)");
+                .set_label(tr!("El contenido ya es JSON válido (no requiere conversión)", "Content is already valid JSON (no conversion needed)"));
             imp.lbl_inspector_status.set_tooltip_text(None);
             return;
         }
@@ -1529,7 +1692,7 @@ impl VarDiffWindow {
 
         if lines > ASYNC_LINE_THRESHOLD {
             imp.lbl_inspector_status
-                .set_label(&format!("Parseando {} ({} líneas)...", mode_label, lines));
+                .set_label(&format!("{} {} ({} {})...", tr!("Parseando", "Parsing"), mode_label, lines, tr!("líneas", "lines")));
             imp.lbl_inspector_status.set_tooltip_text(None);
             let handles = glib::thread_guard::ThreadGuard::new(self.clone());
 
@@ -1537,7 +1700,7 @@ impl VarDiffWindow {
                 let res = match vardump_to_json_string(&text, true) {
                     Ok(json_str) => WorkerResult::InspectorFormatted {
                         text: json_str,
-                        message: format!("{} transformado exitosamente a JSON", mode_label),
+                        message: format!("{} {}", mode_label, tr!("transformado exitosamente a JSON", "successfully converted to JSON")),
                     },
                     Err(e) => WorkerResult::Error(e),
                 };
@@ -1552,12 +1715,12 @@ impl VarDiffWindow {
                     Self::set_buffer_language(&buf, "json");
                     imp.btn_mode_json.set_active(true);
                     imp.lbl_inspector_status
-                        .set_label(&format!("{} convertido a JSON", mode_label));
+                        .set_label(&format!("{} {}", mode_label, tr!("convertido a JSON", "converted to JSON")));
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
                 Err(err) => {
                     imp.lbl_inspector_status
-                        .set_label(&format!("Error: No es una estructura PHP {} válida", mode_label));
+                        .set_label(&format!("Error: {} PHP {} {}", tr!("No es una estructura", "Not a valid"), mode_label, tr!("válida", "structure")));
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err));
                 }
             }

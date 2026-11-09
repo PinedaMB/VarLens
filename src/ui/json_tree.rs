@@ -5,6 +5,7 @@ use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::tr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JsonNodeType {
@@ -207,6 +208,11 @@ pub struct JsonTreeView {
     lbl_breadcrumb: gtk4::Label,
     search_entry: gtk4::SearchEntry,
     lbl_search_count: gtk4::Label,
+    btn_expand_all: gtk4::Button,
+    btn_collapse_all: gtk4::Button,
+    btn_copy_path: gtk4::Button,
+    btn_prev_match: gtk4::Button,
+    btn_next_match: gtk4::Button,
     current_access_path: Rc<RefCell<String>>,
     search_matches: Rc<RefCell<Vec<u32>>>,
     current_match_idx: Rc<RefCell<usize>>,
@@ -231,17 +237,17 @@ impl JsonTreeView {
 
         let btn_expand_all = gtk4::Button::builder()
             .icon_name("view-fullscreen-symbolic")
-            .tooltip_text("Desplegar y expandir todos los nodos")
+            .tooltip_text(tr!("Desplegar y expandir todos los nodos", "Expand all nodes"))
             .build();
 
         let btn_collapse_all = gtk4::Button::builder()
             .icon_name("view-restore-symbolic")
-            .tooltip_text("Colapsar y contraer todos los nodos")
+            .tooltip_text(tr!("Colapsar y contraer todos los nodos", "Collapse all nodes"))
             .build();
 
         let btn_copy_path = gtk4::Button::builder()
             .icon_name("edit-copy-symbolic")
-            .tooltip_text("Copiar ruta de acceso (ej. array[0].HotelCode)")
+            .tooltip_text(tr!("Copiar ruta de acceso (ej. array[0].HotelCode)", "Copy access path (e.g. array[0].HotelCode)"))
             .build();
 
         let sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
@@ -251,19 +257,19 @@ impl JsonTreeView {
         search_box.set_halign(gtk4::Align::End);
 
         let search_entry = gtk4::SearchEntry::builder()
-            .placeholder_text("Buscar nodos o valores...")
+            .placeholder_text(tr!("Buscar nodos o valores...", "Search nodes or values..."))
             .width_request(240)
             .build();
 
         let btn_prev_match = gtk4::Button::builder()
             .icon_name("go-up-symbolic")
-            .tooltip_text("Coincidencia anterior")
+            .tooltip_text(tr!("Coincidencia anterior", "Previous match"))
             .has_frame(false)
             .build();
 
         let btn_next_match = gtk4::Button::builder()
             .icon_name("go-down-symbolic")
-            .tooltip_text("Siguiente coincidencia")
+            .tooltip_text(tr!("Siguiente coincidencia", "Next match"))
             .has_frame(false)
             .build();
 
@@ -426,7 +432,7 @@ impl JsonTreeView {
                     display.clipboard().set_text(&path);
                 }
                 let old_text = breadcrumb_for_copy.text().to_string();
-                breadcrumb_for_copy.set_text(&format!("✓ Copiado: {}", path));
+                breadcrumb_for_copy.set_text(&format!("{}: {}", tr!("✓ Copiado", "✓ Copied"), path));
                 let lbl = breadcrumb_for_copy.clone();
                 glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
                     lbl.set_text(&old_text);
@@ -515,7 +521,7 @@ impl JsonTreeView {
                 let first_pos = matches_search.borrow()[0];
                 sel_search.select_item(first_pos, true);
             } else {
-                count_search.set_label("0 coincidencias");
+                count_search.set_label(tr!("0 coincidencias", "0 matches"));
             }
         };
 
@@ -567,6 +573,11 @@ impl JsonTreeView {
             lbl_breadcrumb,
             search_entry,
             lbl_search_count,
+            btn_expand_all,
+            btn_collapse_all,
+            btn_copy_path,
+            btn_prev_match,
+            btn_next_match,
             current_access_path,
             search_matches,
             current_match_idx,
@@ -575,6 +586,39 @@ impl JsonTreeView {
 
     pub fn widget(&self) -> &gtk4::Box {
         &self.container
+    }
+
+    pub fn update_language(&self) {
+        self.btn_expand_all.set_tooltip_text(Some(tr!(
+            "Desplegar y expandir todos los nodos",
+            "Expand all nodes"
+        )));
+        self.btn_collapse_all.set_tooltip_text(Some(tr!(
+            "Colapsar y contraer todos los nodos",
+            "Collapse all nodes"
+        )));
+        self.btn_copy_path.set_tooltip_text(Some(tr!(
+            "Copiar ruta de acceso (ej. array[0].HotelCode)",
+            "Copy access path (e.g. array[0].HotelCode)"
+        )));
+        self.search_entry.set_placeholder_text(Some(tr!(
+            "Buscar nodos o valores...",
+            "Search nodes or values..."
+        )));
+        self.btn_prev_match.set_tooltip_text(Some(tr!(
+            "Coincidencia anterior",
+            "Previous match"
+        )));
+        self.btn_next_match.set_tooltip_text(Some(tr!(
+            "Siguiente coincidencia",
+            "Next match"
+        )));
+        if self.current_access_path.borrow().is_empty() {
+            self.lbl_breadcrumb.set_text(tr!(
+                "Selecciona un nodo para ver su ruta...",
+                "Select a node to view its path..."
+            ));
+        }
     }
 
     pub fn load_json(&self, value: &serde_json::Value) {
@@ -609,7 +653,10 @@ impl JsonTreeView {
             }
         }
 
-        self.lbl_breadcrumb.set_text("Selecciona un nodo para ver su ruta...");
+        self.lbl_breadcrumb.set_text(tr!(
+            "Selecciona un nodo para ver su ruta...",
+            "Select a node to view its path..."
+        ));
         *self.current_access_path.borrow_mut() = String::new();
         self.lbl_search_count.set_label("");
     }

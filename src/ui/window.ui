@@ -99,7 +99,7 @@
                 <!-- PÁGINA 1: COMPARADOR (DIFF VIEW)          -->
                 <!-- ========================================== -->
                 <child>
-                  <object class="AdwViewStackPage">
+                  <object class="AdwViewStackPage" id="page_diff">
                     <property name="name">diff_page</property>
                     <property name="title" translatable="yes">Comparador</property>
                     <property name="icon-name">view-dual-symbolic</property>
@@ -211,7 +211,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel">
+                                      <object class="GtkLabel" id="lbl_ignore_whitespace">
                                         <property name="label" translatable="yes">Ignorar espacios</property>
                                         <style>
                                           <class name="caption"/>
@@ -246,7 +246,7 @@
                                       <class name="panel-header"/>
                                     </style>
                                     <child>
-                                      <object class="GtkLabel">
+                                      <object class="GtkLabel" id="lbl_title_original">
                                         <property name="label" translatable="yes">Original (Base)</property>
                                         <style>
                                           <class name="heading"/>
@@ -265,7 +265,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_copy_left">
                                         <property name="icon-name">edit-copy-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Copiar código original</property>
                                         <property name="action-name">win.copy-left</property>
@@ -275,7 +275,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_paste_left">
                                         <property name="icon-name">edit-paste-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Pegar del portapapeles</property>
                                         <property name="action-name">win.paste-left</property>
@@ -285,7 +285,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_load_left">
                                         <property name="icon-name">document-open-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Cargar archivo base</property>
                                         <property name="action-name">win.open-left</property>
@@ -333,7 +333,7 @@
                                       <class name="panel-header"/>
                                     </style>
                                     <child>
-                                      <object class="GtkLabel">
+                                      <object class="GtkLabel" id="lbl_title_modified">
                                         <property name="label" translatable="yes">Modificado (Nuevo)</property>
                                         <style>
                                           <class name="heading"/>
@@ -352,7 +352,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_copy_right">
                                         <property name="icon-name">edit-copy-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Copiar código nuevo</property>
                                         <property name="action-name">win.copy-right</property>
@@ -362,7 +362,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_paste_right">
                                         <property name="icon-name">edit-paste-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Pegar del portapapeles</property>
                                         <property name="action-name">win.paste-right</property>
@@ -372,7 +372,7 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkButton">
+                                      <object class="GtkButton" id="btn_load_right">
                                         <property name="icon-name">document-open-symbolic</property>
                                         <property name="tooltip-text" translatable="yes">Cargar archivo modificado</property>
                                         <property name="action-name">win.open-right</property>
@@ -478,7 +478,7 @@
                 <!-- PÁGINA 2: INSPECTOR & FORMATEADOR          -->
                 <!-- ========================================== -->
                 <child>
-                  <object class="AdwViewStackPage">
+                  <object class="AdwViewStackPage" id="page_inspector">
                     <property name="name">inspector_page</property>
                     <property name="title" translatable="yes">Inspector</property>
                     <property name="icon-name">edit-find-symbolic</property>
@@ -833,14 +833,34 @@
                 <!-- PÁGINA 3: PREFERENCIAS                     -->
                 <!-- ========================================== -->
                 <child>
-                  <object class="AdwViewStackPage">
+                  <object class="AdwViewStackPage" id="page_preferences">
                     <property name="name">preferences_page</property>
                     <property name="title" translatable="yes">Preferencias</property>
                     <property name="icon-name">emblem-system-symbolic</property>
                     <property name="child">
                       <object class="AdwPreferencesPage">
                         <child>
-                          <object class="AdwPreferencesGroup">
+                          <object class="AdwPreferencesGroup" id="grp_pref_general">
+                            <property name="title" translatable="yes">General / Idioma</property>
+                            <property name="description" translatable="yes">Ajustes globales de la interfaz</property>
+                            <child>
+                              <object class="AdwComboRow" id="pref_language">
+                                <property name="title" translatable="yes">Idioma de la interfaz</property>
+                                <property name="subtitle" translatable="yes">Selecciona el idioma (Español / English)</property>
+                                <property name="model">
+                                  <object class="GtkStringList">
+                                    <items>
+                                      <item>Español</item>
+                                      <item>English</item>
+                                    </items>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup" id="grp_pref_editor">
                             <property name="title" translatable="yes">Editor de Código</property>
                             <property name="description" translatable="yes">Personaliza la visualización de los editores GtkSourceView</property>
                             <child>
@@ -870,7 +890,7 @@
                           </object>
                         </child>
                         <child>
-                          <object class="AdwPreferencesGroup">
+                          <object class="AdwPreferencesGroup" id="grp_pref_diff">
                             <property name="title" translatable="yes">Motor de Diferencias (Diff Engine)</property>
                             <property name="description" translatable="yes">Ajustes del algoritmo de comparación del crate similar</property>
                             <child>

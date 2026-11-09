@@ -1,4 +1,5 @@
 mod core;
+mod i18n;
 mod ui;
 
 use gtk4::gio;
@@ -20,6 +21,7 @@ fn main() -> glib::ExitCode {
         eprintln!("Error al inicializar GTK4: {}", e);
         return glib::ExitCode::FAILURE;
     }
+    i18n::init();
     sourceview5::init();
     ui::diff_editor::VarLensDiffView::ensure_type();
 
@@ -69,7 +71,10 @@ fn main() -> glib::ExitCode {
                     .version("1.2.0")
                     .website("https://github.com/varlens/vardiff")
                     .license_type(gtk4::License::MitX11)
-                    .comments("Herramienta de desarrollo nativa para Linux para formatear y validar JSON, convertir salidas de var_dump() de PHP y comparar diffs visualmente.")
+                    .comments(tr!(
+                        "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, convertir salidas de var_dump() de PHP y comparar diffs visualmente.",
+                        "Native Linux developer tool for JSON formatting & validation, PHP var_dump conversion, and visual diff inspection."
+                    ))
                     .developers(vec!["VarDiff Developers"])
                     .build();
                 about.present(active_win.as_ref());
