@@ -45,7 +45,7 @@ impl FoldingController {
 
         // 1. Custom Line Numbers Renderer (with ample width and padding)
         let renderer_lines = sourceview5::GutterRendererText::new();
-        renderer_lines.set_size_request(38, -1);
+        renderer_lines.set_size_request(44, -1);
         renderer_lines.set_xpad(8);
         renderer_lines.set_ypad(0);
         renderer_lines.set_xalign(1.0); // right-align line numbers
@@ -65,7 +65,7 @@ impl FoldingController {
                 ren.set_text("");
             } else {
                 ren.set_markup(&format!(
-                    "<span font_desc='monospace' foreground='#75777e'>{}</span>",
+                    "<span font_desc='Fira Code, monospace 11.5pt' foreground='#75777e'>{}</span>",
                     line + 1
                 ));
             }

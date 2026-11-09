@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="varlens-dark" _name="VarLens Modern Dark" version="1.0">
+  <author>VarLens Team</author>
+  <_description>Modern Dark theme inspired by modern developer diff tools</_description>
+
+  <metadata>
+    <property name="variant">dark</property>
+  </metadata>
+
+  <!-- Color Palette -->
+  <color name="bg_dark" value="#131719"/>
+  <color name="bg_line" value="#1c2124"/>
+  <color name="text_normal" value="#c9d1d9"/>
+  <color name="text_dim" value="#6e7681"/>
+  <color name="selection" value="#1f4268"/>
+
+  <!-- Syntax Colors matching screenshot -->
+  <color name="cyan_key" value="#5eead4"/>
+  <color name="orange_str" value="#fed7aa"/>
+  <color name="coral_num" value="#ff7b72"/>
+  <color name="green_bool" value="#34d399"/>
+  <color name="blue_type" value="#79c0ff"/>
+  <color name="yellow_tag" value="#f8e45c"/>
+
+  <!-- Global Styles -->
+  <style name="text" foreground="text_normal" background="bg_dark"/>
+  <style name="selection" background="selection"/>
+  <style name="cursor" foreground="#ffffff"/>
+  <style name="current-line" background="bg_line"/>
+  <style name="current-line-number" foreground="text_normal" background="bg_line"/>
+  <style name="line-numbers" foreground="text_dim" background="bg_dark"/>
+  <style name="bracket-match" bold="true" background="#2b3b48"/>
+
+  <!-- Common / Base Syntax -->
+  <style name="def:comment" foreground="text_dim" italic="true"/>
+  <style name="def:string" foreground="orange_str"/>
+  <style name="def:special-char" foreground="coral_num"/>
+  <style name="def:number" foreground="coral_num"/>
+  <style name="def:decimal" foreground="coral_num"/>
+  <style name="def:floating-point" foreground="coral_num"/>
+  <style name="def:base-n-integer" foreground="coral_num"/>
+  <style name="def:boolean" foreground="green_bool" bold="true"/>
+  <style name="def:constant" foreground="green_bool"/>
+  <style name="def:identifier" foreground="cyan_key"/>
+  <style name="def:keyword" foreground="coral_num" bold="true"/>
+  <style name="def:statement" foreground="coral_num"/>
+  <style name="def:type" foreground="blue_type"/>
+
+  <!-- JSON Specific styles -->
+  <style name="json:keyname" foreground="cyan_key"/>
+  <style name="json:string" foreground="orange_str"/>
+  <style name="json:decimal" foreground="coral_num"/>
+  <style name="json:float" foreground="coral_num"/>
+  <style name="json:boolean" foreground="green_bool" bold="true"/>
+  <style name="json:null-value" foreground="green_bool"/>
+  <style name="json:special-char" foreground="coral_num"/>
+
+  <!-- XML Specific styles -->
+  <style name="xml:element-name" foreground="cyan_key"/>
+  <style name="xml:attribute-name" foreground="coral_num"/>
+  <style name="xml:attribute-value" foreground="orange_str"/>
+  <style name="xml:tag" foreground="text_dim"/>
+  <style name="xml:processing-instruction" foreground="text_dim" italic="true"/>
+</style-scheme>

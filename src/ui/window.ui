@@ -301,7 +301,7 @@
                                     <property name="vexpand">true</property>
                                     <property name="hexpand">true</property>
                                     <child>
-                                      <object class="GtkSourceView" id="source_diff_left">
+                                      <object class="VarLensDiffView" id="source_diff_left">
                                         <property name="show-line-numbers">false</property>
                                         <property name="show-line-marks">false</property>
                                         <property name="highlight-current-line">true</property>
@@ -311,6 +311,9 @@
                                         <property name="top-margin">6</property>
                                         <property name="bottom-margin">6</property>
                                         <property name="left-margin">14</property>
+                                        <style>
+                                          <class name="code-editor"/>
+                                        </style>
                                       </object>
                                     </child>
                                   </object>
@@ -385,7 +388,7 @@
                                     <property name="vexpand">true</property>
                                     <property name="hexpand">true</property>
                                     <child>
-                                      <object class="GtkSourceView" id="source_diff_right">
+                                      <object class="VarLensDiffView" id="source_diff_right">
                                         <property name="show-line-numbers">false</property>
                                         <property name="show-line-marks">false</property>
                                         <property name="highlight-current-line">true</property>
@@ -395,6 +398,9 @@
                                         <property name="top-margin">6</property>
                                         <property name="bottom-margin">6</property>
                                         <property name="left-margin">14</property>
+                                        <style>
+                                          <class name="code-editor"/>
+                                        </style>
                                       </object>
                                     </child>
                                   </object>
@@ -685,6 +691,9 @@
                                     <property name="top-margin">6</property>
                                     <property name="bottom-margin">6</property>
                                     <property name="left-margin">14</property>
+                                    <style>
+                                      <class name="code-editor"/>
+                                    </style>
                                   </object>
                                 </child>
                               </object>

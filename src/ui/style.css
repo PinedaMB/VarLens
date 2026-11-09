@@ -50,3 +50,20 @@
     background-color: alpha(@error_bg_color, 0.22);
     color: @error_color;
 }
+
+/* Code Editors typography and theme matching */
+.code-editor,
+.code-editor textview,
+.code-editor text {
+    font-family: "Fira Code", monospace;
+    font-size: 15.5px;
+    line-height: 1.6;
+    font-feature-settings: "liga" 1, "calt" 1;
+}
+
+/* Gutter line numbers styling */
+.gutter-view text,
+.gutter-view textview {
+    font-family: "Fira Code", monospace;
+    font-size: 14.5px;
+}

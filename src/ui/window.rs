@@ -49,9 +49,9 @@ mod imp {
         #[template_child]
         pub diff_paned: TemplateChild<gtk4::Paned>,
         #[template_child]
-        pub source_diff_left: TemplateChild<sourceview5::View>,
+        pub source_diff_left: TemplateChild<crate::ui::diff_editor::VarLensDiffView>,
         #[template_child]
-        pub source_diff_right: TemplateChild<sourceview5::View>,
+        pub source_diff_right: TemplateChild<crate::ui::diff_editor::VarLensDiffView>,
         #[template_child]
         pub lbl_left_file: TemplateChild<gtk4::Label>,
         #[template_child]
@@ -192,25 +192,23 @@ impl VarDiffWindow {
         // 1. Setup Line & Inline Word Diff Tags
         let tag_del = gtk4::TextTag::builder()
             .name("diff-deleted")
-            .background_rgba(&gdk::RGBA::new(0.88, 0.11, 0.14, 0.18))
-            .paragraph_background_rgba(&gdk::RGBA::new(0.88, 0.11, 0.14, 0.16))
+            .paragraph_background_rgba(&gdk::RGBA::new(0.92, 0.15, 0.18, 0.20))
             .build();
 
         let tag_ins = gtk4::TextTag::builder()
             .name("diff-inserted")
-            .background_rgba(&gdk::RGBA::new(0.18, 0.76, 0.49, 0.18))
-            .paragraph_background_rgba(&gdk::RGBA::new(0.18, 0.76, 0.49, 0.16))
+            .paragraph_background_rgba(&gdk::RGBA::new(0.0, 0.62, 0.35, 0.20))
             .build();
 
         let tag_span_del = gtk4::TextTag::builder()
             .name("diff-span-deleted")
-            .background_rgba(&gdk::RGBA::new(0.92, 0.18, 0.22, 0.48))
+            .foreground_rgba(&gdk::RGBA::new(1.0, 1.0, 1.0, 1.0))
             .weight(700)
             .build();
 
         let tag_span_ins = gtk4::TextTag::builder()
             .name("diff-span-inserted")
-            .background_rgba(&gdk::RGBA::new(0.20, 0.82, 0.52, 0.48))
+            .foreground_rgba(&gdk::RGBA::new(1.0, 1.0, 1.0, 1.0))
             .weight(700)
             .build();
 
@@ -267,17 +265,20 @@ impl VarDiffWindow {
 
         // 6. Setup Code Folding Gutters
         let fold_ins = FoldingController::new(imp.source_inspector.get());
-        let fold_dl = FoldingController::new(imp.source_diff_left.get());
-        let fold_dr = FoldingController::new(imp.source_diff_right.get());
+        let fold_dl = FoldingController::new(imp.source_diff_left.get().upcast());
+        let fold_dr = FoldingController::new(imp.source_diff_right.get().upcast());
         imp.fold_inspector.set(fold_ins).ok();
         imp.fold_diff_left.set(fold_dl).ok();
         imp.fold_diff_right.set(fold_dr).ok();
 
-        // 7. Register Window Actions & Shortcuts
+        // 7. Setup Minimap Drag and Scroll
+        self.setup_minimap();
+
+        // 8. Register Window Actions & Shortcuts
         self.setup_actions();
         self.setup_shortcuts();
 
-        // 8. Start with clean editors and initialize metrics
+        // 9. Start with clean editors and initialize metrics
         self.update_inspector_metrics();
     }
 
@@ -509,6 +510,99 @@ impl VarDiffWindow {
         imp.pref_patience.connect_active_notify(move |_| {
             win_p_pat.handle_compute_diff();
         });
+    }
+
+    fn setup_minimap(&self) {
+        let imp = self.imp();
+        let map = imp.source_map.get();
+        let insp = imp.source_inspector.get();
+        let map_weak = map.downgrade();
+        let insp_weak = insp.downgrade();
+
+        let scroll_to_pos = move |y: f64| {
+            if let (Some(map), Some(insp)) = (map_weak.upgrade(), insp_weak.upgrade()) {
+                let map_h = map.height() as f64;
+                if map_h <= 0.0 {
+                    return;
+                }
+
+                // Obtener o calcular la altura real del deslizador (slider)
+                let slider_h = map
+                    .first_child()
+                    .map(|c| c.height() as f64)
+                    .filter(|&h| h > 10.0)
+                    .unwrap_or_else(|| {
+                        if let Some(vadj) = insp.vadjustment() {
+                            let total = vadj.upper() - vadj.lower();
+                            if total > 0.0 {
+                                ((vadj.page_size() / total) * map_h).clamp(24.0, map_h)
+                            } else {
+                                30.0
+                            }
+                        } else {
+                            30.0
+                        }
+                    });
+
+                // Centrar el deslizador en la posición exacta del cursor
+                let available_h = (map_h - slider_h).max(1.0);
+                let ratio = ((y - slider_h * 0.5) / available_h).clamp(0.0, 1.0);
+
+                if let Some(vadj) = insp.vadjustment() {
+                    let max_scroll = (vadj.upper() - vadj.page_size()).max(vadj.lower());
+                    let target_val = vadj.lower() + ratio * (max_scroll - vadj.lower());
+                    vadj.set_value(target_val);
+                }
+
+                let buf = insp.buffer();
+                let total_lines = buf.line_count();
+                if total_lines > 0 {
+                    let target_line = ((total_lines - 1) as f64 * ratio).round() as i32;
+                    if let Some(iter) = buf.iter_at_line(target_line) {
+                        buf.place_cursor(&iter);
+                    }
+                }
+
+                map.queue_draw();
+            }
+        };
+
+        let drag = gtk4::GestureDrag::new();
+        drag.set_propagation_phase(gtk4::PropagationPhase::Capture);
+
+        let on_begin = scroll_to_pos.clone();
+        let insp_focus = insp.clone();
+        drag.connect_drag_begin(move |gesture, _x, y| {
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            insp_focus.grab_focus();
+            on_begin(y);
+        });
+
+        let on_update = scroll_to_pos.clone();
+        drag.connect_drag_update(move |gesture, _offset_x, offset_y| {
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            if let Some((_start_x, start_y)) = gesture.start_point() {
+                on_update(start_y + offset_y);
+            }
+        });
+
+        map.add_controller(drag);
+
+        let scroll_ctrl = gtk4::EventControllerScroll::new(
+            gtk4::EventControllerScrollFlags::VERTICAL,
+        );
+        scroll_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let insp_scroll = insp.clone();
+        scroll_ctrl.connect_scroll(move |_ctrl, _dx, dy| {
+            if let Some(vadj) = insp_scroll.vadjustment() {
+                let step = vadj.step_increment().max(20.0);
+                let max_val = (vadj.upper() - vadj.page_size()).max(vadj.lower());
+                let new_val = (vadj.value() + dy * step * 3.0).clamp(vadj.lower(), max_val);
+                vadj.set_value(new_val);
+            }
+            glib::Propagation::Stop
+        });
+        map.add_controller(scroll_ctrl);
     }
 
     fn setup_shortcuts(&self) {
@@ -955,6 +1049,9 @@ impl VarDiffWindow {
         let left_buf = imp.source_diff_left.buffer();
         let right_buf = imp.source_diff_right.buffer();
 
+        imp.source_diff_left.clear_diff_spans();
+        imp.source_diff_right.clear_diff_spans();
+
         if let Some(tag_del) = imp.tag_deleted.get() {
             left_buf.remove_tag(tag_del, &left_buf.start_iter(), &left_buf.end_iter());
         }
@@ -1085,6 +1182,30 @@ impl VarDiffWindow {
         }
 
         // 2. Inline word/token-level highlights
+        let left_diff_spans: Vec<crate::ui::diff_editor::DiffSpan> = summary
+            .left_spans
+            .iter()
+            .map(|s| crate::ui::diff_editor::DiffSpan {
+                line: s.line_index as i32,
+                start_char: s.start_char as i32,
+                end_char: s.end_char as i32,
+                is_deletion: true,
+            })
+            .collect();
+        imp.source_diff_left.set_diff_spans(left_diff_spans);
+
+        let right_diff_spans: Vec<crate::ui::diff_editor::DiffSpan> = summary
+            .right_spans
+            .iter()
+            .map(|s| crate::ui::diff_editor::DiffSpan {
+                line: s.line_index as i32,
+                start_char: s.start_char as i32,
+                end_char: s.end_char as i32,
+                is_deletion: false,
+            })
+            .collect();
+        imp.source_diff_right.set_diff_spans(right_diff_spans);
+
         if let Some(tag_sdel) = imp.tag_span_deleted.get() {
             for s in &summary.left_spans {
                 if let (Some(start_iter), Some(end_iter)) = (

@@ -262,6 +262,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_diff_debug_spans() {
+        let left = r#"{
+  "success": true,
+  "data": {
+    "confirmation_code": "J9MYX3",
+    "status": "confirmed",
+    "reservation": {
+"#;
+        let right = r#"{
+  "success": true,
+  "data": {
+    "confirmation_code": "9R99XK",
+    "status": "in process",
+    "reservation": {
+"#;
+        let summary = compute_diff_ext(left, right, false, false);
+        println!("LEFT HIGHLIGHTS: {:?}", summary.left_highlights);
+        println!("RIGHT HIGHLIGHTS: {:?}", summary.right_highlights);
+        println!("LEFT SPANS: {:?}", summary.left_spans);
+        println!("RIGHT SPANS: {:?}", summary.right_spans);
+    }
+
+    #[test]
     fn test_diff_computation() {
         let old = "line 1\nline 2\nline 3\n";
         let new = "line 1\nline 2 modified\nline 3\nline 4\n";

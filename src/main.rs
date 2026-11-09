@@ -21,6 +21,19 @@ fn main() -> glib::ExitCode {
         return glib::ExitCode::FAILURE;
     }
     sourceview5::init();
+    ui::diff_editor::VarLensDiffView::ensure_type();
+
+    // Register custom style schemes
+    let cache_dir = std::env::temp_dir().join("varlens/styles");
+    let _ = std::fs::create_dir_all(&cache_dir);
+    let style_file = cache_dir.join("varlens-dark.xml");
+    let _ = std::fs::write(&style_file, include_str!("../data/styles/varlens-dark.xml"));
+
+    let scheme_mgr = sourceview5::StyleSchemeManager::default();
+    scheme_mgr.append_search_path("data/styles");
+    if let Some(path_str) = cache_dir.to_str() {
+        scheme_mgr.append_search_path(path_str);
+    }
 
     let app = adw::Application::builder()
         .application_id(APP_ID)
