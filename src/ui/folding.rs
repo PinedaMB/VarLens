@@ -43,13 +43,14 @@ impl FoldingController {
         let regions: Rc<RefCell<Vec<FoldRegion>>> = Rc::new(RefCell::new(Vec::new()));
         let folded_lines: Rc<RefCell<HashSet<usize>>> = Rc::new(RefCell::new(HashSet::new()));
 
-        // 1. Custom Line Numbers Renderer (with ample width and padding)
+        // 1. Custom Line Numbers Renderer (with ample width and vertical breathing room)
         let renderer_lines = sourceview5::GutterRendererText::new();
         renderer_lines.set_size_request(44, -1);
         renderer_lines.set_xpad(8);
-        renderer_lines.set_ypad(0);
+        renderer_lines.set_ypad(2);
         renderer_lines.set_xalign(1.0); // right-align line numbers
-        renderer_lines.set_alignment_mode(sourceview5::GutterRendererAlignmentMode::First);
+        renderer_lines.set_yalign(0.5); // vertically center to prevent clipping at the top
+        renderer_lines.set_alignment_mode(sourceview5::GutterRendererAlignmentMode::Cell);
 
         let reg_lines = regions.clone();
         let fold_lines = folded_lines.clone();
@@ -65,7 +66,7 @@ impl FoldingController {
                 ren.set_text("");
             } else {
                 ren.set_markup(&format!(
-                    "<span font_desc='Fira Code, monospace 11.5pt' foreground='#75777e'>{}</span>",
+                    "<span font_desc='Fira Code, monospace 10.5pt' foreground='#75777e'>{}</span>",
                     line + 1
                 ));
             }
@@ -75,9 +76,10 @@ impl FoldingController {
         let renderer_fold = sourceview5::GutterRendererText::new();
         renderer_fold.set_size_request(22, -1);
         renderer_fold.set_xpad(5);
-        renderer_fold.set_ypad(0);
+        renderer_fold.set_ypad(2);
         renderer_fold.set_xalign(0.5); // centered arrow
-        renderer_fold.set_alignment_mode(sourceview5::GutterRendererAlignmentMode::First);
+        renderer_fold.set_yalign(0.5);
+        renderer_fold.set_alignment_mode(sourceview5::GutterRendererAlignmentMode::Cell);
         renderer_fold.set_cursor_from_name(Some("pointer"));
 
         let reg_fold = regions.clone();

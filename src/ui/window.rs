@@ -97,6 +97,14 @@ mod imp {
         #[template_child]
         pub btn_mode_xml: TemplateChild<gtk4::ToggleButton>,
         #[template_child]
+        pub btn_insp_view_code: TemplateChild<gtk4::ToggleButton>,
+        #[template_child]
+        pub btn_insp_view_tree: TemplateChild<gtk4::ToggleButton>,
+        #[template_child]
+        pub stack_inspector_view: TemplateChild<gtk4::Stack>,
+        #[template_child]
+        pub box_tree_container: TemplateChild<gtk4::Box>,
+        #[template_child]
         pub lbl_inspector_file: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_node_count: TemplateChild<gtk4::Label>,
@@ -140,6 +148,7 @@ mod imp {
         pub fold_inspector: OnceCell<FoldingController>,
         pub fold_diff_left: OnceCell<FoldingController>,
         pub fold_diff_right: OnceCell<FoldingController>,
+        pub json_tree: OnceCell<crate::ui::json_tree::JsonTreeView>,
     }
 
     #[glib::object_subclass]
@@ -255,6 +264,7 @@ impl VarDiffWindow {
         let tag_ins_clone = tag_ins;
         let sdl_clone = imp.source_diff_left.get();
         let sdr_clone = imp.source_diff_right.get();
+        let btc_clone = imp.box_tree_container.get();
         style_manager.connect_dark_notify(move |sm| {
             let is_dark = sm.is_dark();
             Self::apply_schemes(&lb_clone, &rb_clone, &ib_clone, is_dark);
@@ -267,6 +277,7 @@ impl VarDiffWindow {
             }
             sdl_clone.queue_draw();
             sdr_clone.queue_draw();
+            btc_clone.queue_draw();
         });
 
         // 3. Set Initial Syntax Highlighting Languages
@@ -301,11 +312,30 @@ impl VarDiffWindow {
         // 7. Setup Minimap Drag and Scroll
         self.setup_minimap();
 
-        // 8. Register Window Actions & Shortcuts
+        // 8. Setup Interactive JSON Tree View
+        let json_tree = crate::ui::json_tree::JsonTreeView::new();
+        imp.box_tree_container.append(json_tree.widget());
+        imp.json_tree.set(json_tree).ok();
+
+        let win_tree = self.clone();
+        imp.btn_insp_view_tree.connect_toggled(move |btn| {
+            if btn.is_active() {
+                win_tree.switch_to_tree_view();
+            }
+        });
+
+        let win_code = self.clone();
+        imp.btn_insp_view_code.connect_toggled(move |btn| {
+            if btn.is_active() {
+                win_code.imp().stack_inspector_view.set_visible_child_name("page_code");
+            }
+        });
+
+        // 9. Register Window Actions & Shortcuts
         self.setup_actions();
         self.setup_shortcuts();
 
-        // 9. Start with clean editors and initialize metrics
+        // 10. Start with clean editors and initialize metrics
         self.update_inspector_metrics();
     }
 
@@ -997,6 +1027,44 @@ impl VarDiffWindow {
                 imp.lbl_rfc_badge.set_label(&err_loc);
                 imp.lbl_rfc_badge.remove_css_class("badge-success");
                 imp.lbl_rfc_badge.add_css_class("badge-error");
+            }
+        }
+
+        if imp.btn_insp_view_tree.is_active() {
+            self.refresh_tree_view();
+        }
+    }
+
+    fn switch_to_tree_view(&self) {
+        let imp = self.imp();
+        imp.stack_inspector_view.set_visible_child_name("page_tree");
+        self.refresh_tree_view();
+    }
+
+    fn refresh_tree_view(&self) {
+        let imp = self.imp();
+        if let Some(tree_view) = imp.json_tree.get() {
+            let buf = imp.source_inspector.buffer();
+            let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
+
+            if text.trim().is_empty() {
+                return;
+            }
+
+            let parsed_json = if imp.btn_mode_json.is_active() {
+                serde_json::from_str::<serde_json::Value>(&text).ok()
+            } else if imp.btn_mode_vardump.is_active() || imp.btn_mode_raw.is_active() {
+                crate::core::vardump::parse_vardump(&text).ok()
+            } else if imp.btn_mode_xml.is_active() {
+                crate::core::xml::xml_to_json_string(&text, false)
+                    .ok()
+                    .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+            } else {
+                serde_json::from_str::<serde_json::Value>(&text).ok()
+            };
+
+            if let Some(val) = parsed_json {
+                tree_view.load_json(&val);
             }
         }
     }

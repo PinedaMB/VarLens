@@ -62,8 +62,41 @@
 }
 
 /* Gutter line numbers styling */
+gutter,
+gutter text,
+gutterview,
 .gutter-view text,
 .gutter-view textview {
     font-family: "Fira Code", monospace;
-    font-size: 14.5px;
+    font-size: 13.5px;
+}
+
+/* Tree view styling */
+.tree-top-bar {
+    border-bottom: 1px solid alpha(@borders, 0.65);
+    background-color: alpha(@headerbar_bg_color, 0.45);
+}
+
+.tree-path-bar {
+    padding: 5px 12px;
+    background-color: alpha(@card_bg_color, 0.5);
+    border-radius: 6px;
+    border: 1px solid alpha(@borders, 0.5);
+}
+
+.tree-node-label {
+    font-family: "Fira Code", monospace;
+    font-size: 13.5px;
+    padding: 1px 4px;
+}
+
+.tree-list-view,
+.tree-list-view row,
+.tree-list-view listitem {
+    background-color: @view_bg_color;
+    padding: 1px 2px;
+}
+
+treeexpander {
+    min-height: 22px;
 }
