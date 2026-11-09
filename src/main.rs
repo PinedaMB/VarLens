@@ -13,6 +13,7 @@ const APP_ID: &str = "io.github.PinedaMB.VarLens";
 
 fn main() -> glib::ExitCode {
     // If GSK_RENDERER is not explicitly specified, prefer cairo or gl to avoid Vulkan swapchain OOM crashes on Linux
+    #[cfg(target_os = "linux")]
     if std::env::var_os("GSK_RENDERER").is_none() {
         std::env::set_var("GSK_RENDERER", "gl");
     }

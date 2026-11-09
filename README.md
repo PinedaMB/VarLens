@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![GTK4](https://img.shields.io/badge/GTK-4.12+-green.svg)](https://gtk.org)
 [![Libadwaita](https://img.shields.io/badge/libadwaita-1.5+-purple.svg)](https://gnome.pages.gitlab.gnome.org/libadwaita)
-[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](https://kernel.org)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)](https://github.com/PinedaMB/VarLens/releases)
 [![License](https://img.shields.io/badge/license-MIT-informational.svg)](LICENSE)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-rainbowfacp-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/rainbowfacp)
 
@@ -173,6 +173,10 @@ install -Dm644 data/io.github.PinedaMB.VarLens.metainfo.xml ~/.local/share/metai
 gtk4-update-icon-cache -f -t ~/.local/share/icons/hicolor
 update-desktop-database ~/.local/share/applications
 ```
+
+### Windows Portable
+
+Download `VarLens-windows-x86_64.zip` from [Releases](https://github.com/PinedaMB/VarLens/releases), extract the ZIP archive, and run `varlens.exe`. No installation or runtime dependencies required.
 
 ---
 

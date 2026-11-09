@@ -65,3 +65,72 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: Build Windows Portable (.zip)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-gtksourceview5
+            mingw-w64-ucrt-x86_64-ntldd
+            zip
+
+      - name: Compile Windows Release Binary
+        shell: msys2 {0}
+        run: cargo build --release
+
+      - name: Bundle Windows Portable Package
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/VarLens-Portable
+          cp target/release/varlens.exe dist/VarLens-Portable/
+
+          # Copy DLL runtime dependencies
+          cd dist/VarLens-Portable
+          for dll in $(ntldd -R varlens.exe | grep -i ucrt64 | awk '{print $3}' | tr -d '\r'); do
+            if [ -f "$dll" ]; then
+              cp -u "$dll" . 2>/dev/null || true
+            fi
+          done
+
+          # Ensure core GTK & Adwaita DLLs are present
+          cp -u /ucrt64/bin/libgtk-4-1.dll . 2>/dev/null || true
+          cp -u /ucrt64/bin/libadwaita-1-0.dll . 2>/dev/null || true
+          cp -u /ucrt64/bin/libgtksourceview-5-0.dll . 2>/dev/null || true
+
+          # Copy and compile GSettings schemas
+          mkdir -p share/glib-2.0/schemas
+          cp -r /ucrt64/share/glib-2.0/schemas/* share/glib-2.0/schemas/ 2>/dev/null || true
+          glib-compile-schemas share/glib-2.0/schemas/
+
+          # Copy base Adwaita icon theme
+          mkdir -p share/icons
+          cp -r /ucrt64/share/icons/hicolor share/icons/ 2>/dev/null || true
+          cp -r /ucrt64/share/icons/Adwaita share/icons/ 2>/dev/null || true
+
+          # Package portable zip
+          cd ..
+          zip -r VarLens-windows-x86_64.zip VarLens-Portable/
+
+      - name: Upload Windows Asset to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/VarLens-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
