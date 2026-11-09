@@ -338,7 +338,7 @@ impl JsonTreeView {
         factory.connect_setup(|_factory, obj| {
             let list_item = obj.downcast_ref::<gtk4::ListItem>().unwrap();
             let expander = gtk4::TreeExpander::new();
-            expander.set_indent_for_depth(false);
+            expander.set_indent_for_depth(true);
             expander.set_valign(gtk4::Align::Center);
             let label = gtk4::Label::builder()
                 .xalign(0.0)

@@ -56,8 +56,7 @@
 .code-editor textview,
 .code-editor text {
     font-family: "Fira Code", monospace;
-    font-size: 15.5px;
-    line-height: 1.6;
+    font-size: 15px;
     font-feature-settings: "liga" 1, "calt" 1;
 }
 

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="data/icons/hicolor/scalable/apps/io.github.varlens.App.svg" width="128" height="128" alt="VarLens Logo" />
+
 # VarLens
 
 ### The modern, blazing-fast native Linux developer lens for inspecting, visualizing, converting, and diffing structured data.
@@ -22,6 +24,27 @@ Modern backend and full-stack developers constantly deal with diverse structured
 Web-based formatters compromise sensitive credentials and struggle with multi-megabyte payloads. Heavy IDEs are slow to open. 
 
 **VarLens** is engineered specifically for Linux developers as a **zero-compromise, native desktop application**. Built with **Rust**, **GTK4**, and **Libadwaita**, it launches instantly, operates completely offline, runs heavy operations asynchronously, and adheres to GNOME's modern design standards.
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+
+### Side-by-Side Visual Diff Comparator
+<img src="screenshots/diff-view.png" width="920" alt="VarLens Side-by-Side Diff View" />
+
+<br/><br/>
+
+| Interactive JSON Tree Explorer | JSON Inspector &amp; Live AST Metrics |
+| :---: | :---: |
+| <img src="screenshots/tree-view.png" width="450" alt="Tree View" /> | <img src="screenshots/inspector-json.png" width="450" alt="JSON Inspector" /> |
+
+| PHP `var_dump()` &amp; `print_r()` Parser | XML Inspector &amp; Converter |
+| :---: | :---: |
+| <img src="screenshots/inspector-vardump.png" width="450" alt="PHP var_dump Inspector" /> | <img src="screenshots/inspector-xml.png" width="450" alt="XML Inspector" /> |
+
+</div>
 
 ---
 
