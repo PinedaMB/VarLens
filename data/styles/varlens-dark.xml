@@ -7,14 +7,12 @@
     <property name="variant">dark</property>
   </metadata>
 
-  <!-- Color Palette -->
   <color name="bg_dark" value="#131719"/>
   <color name="bg_line" value="#1c2124"/>
   <color name="text_normal" value="#c9d1d9"/>
   <color name="text_dim" value="#6e7681"/>
   <color name="selection" value="#1f4268"/>
 
-  <!-- Syntax Colors matching screenshot -->
   <color name="cyan_key" value="#5eead4"/>
   <color name="orange_str" value="#fed7aa"/>
   <color name="coral_num" value="#ff7b72"/>
@@ -22,7 +20,6 @@
   <color name="blue_type" value="#79c0ff"/>
   <color name="yellow_tag" value="#f8e45c"/>
 
-  <!-- Global Styles -->
   <style name="text" foreground="text_normal" background="bg_dark"/>
   <style name="selection" background="selection"/>
   <style name="cursor" foreground="#ffffff"/>
@@ -31,7 +28,6 @@
   <style name="line-numbers" foreground="text_dim" background="bg_dark"/>
   <style name="bracket-match" bold="true" background="#2b3b48"/>
 
-  <!-- Common / Base Syntax -->
   <style name="def:comment" foreground="text_dim" italic="true"/>
   <style name="def:string" foreground="orange_str"/>
   <style name="def:special-char" foreground="coral_num"/>
@@ -46,7 +42,6 @@
   <style name="def:statement" foreground="coral_num"/>
   <style name="def:type" foreground="blue_type"/>
 
-  <!-- JSON Specific styles -->
   <style name="json:keyname" foreground="cyan_key"/>
   <style name="json:string" foreground="orange_str"/>
   <style name="json:decimal" foreground="coral_num"/>
@@ -55,7 +50,6 @@
   <style name="json:null-value" foreground="green_bool"/>
   <style name="json:special-char" foreground="coral_num"/>
 
-  <!-- XML Specific styles -->
   <style name="xml:element-name" foreground="cyan_key"/>
   <style name="xml:attribute-name" foreground="coral_num"/>
   <style name="xml:attribute-value" foreground="orange_str"/>

@@ -55,11 +55,11 @@ impl EditorView {
     /// Updates the style scheme according to dark / light preference.
     pub fn update_scheme(buffer: &sourceview5::Buffer, is_dark: bool) {
         let scheme_mgr = sourceview5::StyleSchemeManager::default();
-        let scheme_id = if is_dark { "varlens-dark" } else { "Adwaita" };
+        let scheme_id = if is_dark { "varlens-dark" } else { "varlens-light" };
 
         if let Some(scheme) = scheme_mgr.scheme(scheme_id) {
             buffer.set_style_scheme(Some(&scheme));
-        } else if let Some(fallback) = scheme_mgr.scheme(if is_dark { "Adwaita-dark" } else { "classic" }) {
+        } else if let Some(fallback) = scheme_mgr.scheme(if is_dark { "Adwaita-dark" } else { "Adwaita" }) {
             buffer.set_style_scheme(Some(&fallback));
         } else if let Some(fallback_classic) = scheme_mgr.scheme(if is_dark { "classic-dark" } else { "classic" }) {
             buffer.set_style_scheme(Some(&fallback_classic));

@@ -17,7 +17,7 @@ pub struct LineHighlight {
 }
 
 /// Represents a character/word-level inline highlight inside a line.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpanHighlight {
     pub line_index: usize,
     /// Character offset from start of line
@@ -215,34 +215,46 @@ fn compute_inline_spans(
     left_spans: &mut Vec<SpanHighlight>,
     right_spans: &mut Vec<SpanHighlight>,
 ) {
-    let word_diff = TextDiff::from_words(old_str, new_str);
+    let old_clean = old_str.trim_end_matches(&['\r', '\n'][..]);
+    let new_clean = new_str.trim_end_matches(&['\r', '\n'][..]);
+    let word_diff = TextDiff::from_words(old_clean, new_clean);
+
     let mut l_char = 0;
     let mut r_char = 0;
+    let mut line_l_spans = Vec::new();
+    let mut line_r_spans = Vec::new();
 
     for change in word_diff.iter_all_changes() {
-        let len = change.value().chars().count();
+        let val = change.value();
+        let len = val.chars().count();
         match change.tag() {
             ChangeTag::Equal => {
                 l_char += len;
                 r_char += len;
             }
             ChangeTag::Delete => {
-                if !change.value().trim().is_empty() {
-                    left_spans.push(SpanHighlight {
+                let trimmed = val.trim();
+                if !trimmed.is_empty() {
+                    let leading = val.chars().take_while(|c| c.is_whitespace()).count();
+                    let trailing = val.chars().rev().take_while(|c| c.is_whitespace()).count();
+                    line_l_spans.push(SpanHighlight {
                         line_index: left_line,
-                        start_char: l_char,
-                        end_char: l_char + len,
+                        start_char: l_char + leading,
+                        end_char: (l_char + len).saturating_sub(trailing),
                         tag: DiffTag::Delete,
                     });
                 }
                 l_char += len;
             }
             ChangeTag::Insert => {
-                if !change.value().trim().is_empty() {
-                    right_spans.push(SpanHighlight {
+                let trimmed = val.trim();
+                if !trimmed.is_empty() {
+                    let leading = val.chars().take_while(|c| c.is_whitespace()).count();
+                    let trailing = val.chars().rev().take_while(|c| c.is_whitespace()).count();
+                    line_r_spans.push(SpanHighlight {
                         line_index: right_line,
-                        start_char: r_char,
-                        end_char: r_char + len,
+                        start_char: r_char + leading,
+                        end_char: (r_char + len).saturating_sub(trailing),
                         tag: DiffTag::Insert,
                     });
                 }
@@ -250,6 +262,43 @@ fn compute_inline_spans(
             }
         }
     }
+
+    merge_adjacent_spans(&mut line_l_spans, old_clean);
+    merge_adjacent_spans(&mut line_r_spans, new_clean);
+
+    left_spans.extend(line_l_spans);
+    right_spans.extend(line_r_spans);
+}
+
+fn merge_adjacent_spans(spans: &mut Vec<SpanHighlight>, text: &str) {
+    if spans.len() < 2 {
+        return;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut merged = Vec::with_capacity(spans.len());
+    let mut current = spans[0];
+
+    for next in spans.iter().skip(1) {
+        if next.line_index == current.line_index && next.tag == current.tag {
+            let gap_start = current.end_char.min(chars.len());
+            let gap_end = next.start_char.min(chars.len());
+            let gap_is_ws = if gap_start <= gap_end {
+                chars[gap_start..gap_end].iter().all(|c| c.is_whitespace())
+            } else {
+                false
+            };
+
+            // Merge tokens if separated only by whitespace (e.g. "in process" or {"a": 1})
+            if gap_is_ws && (gap_end.saturating_sub(gap_start)) <= 4 {
+                current.end_char = next.end_char;
+                continue;
+            }
+        }
+        merged.push(current);
+        current = *next;
+    }
+    merged.push(current);
+    *spans = merged;
 }
 
 /// Computes the diff between two text inputs using default whitespace sensitivity.
@@ -264,24 +313,21 @@ mod tests {
     #[test]
     fn test_diff_debug_spans() {
         let left = r#"{
-  "success": true,
-  "data": {
-    "confirmation_code": "J9MYX3",
-    "status": "confirmed",
-    "reservation": {
+  "confirmation_code": "J9MYX3",
+  "status": "confirmed"
+}
 "#;
         let right = r#"{
-  "success": true,
-  "data": {
-    "confirmation_code": "9R99XK",
-    "status": "in process",
-    "reservation": {
+  "confirmation_code": "9R99XK",
+  "status": "in process"
+}
 "#;
         let summary = compute_diff_ext(left, right, false, false);
-        println!("LEFT HIGHLIGHTS: {:?}", summary.left_highlights);
-        println!("RIGHT HIGHLIGHTS: {:?}", summary.right_highlights);
-        println!("LEFT SPANS: {:?}", summary.left_spans);
-        println!("RIGHT SPANS: {:?}", summary.right_spans);
+        assert_eq!(summary.left_highlights.len(), 2);
+        assert_eq!(summary.right_highlights.len(), 2);
+        assert_eq!(summary.left_spans.len(), 2);
+        // "in process" is merged into a single span
+        assert_eq!(summary.right_spans.len(), 2);
     }
 
     #[test]

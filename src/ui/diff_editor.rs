@@ -38,6 +38,7 @@ mod imp {
                 let view = self.obj();
                 let spans = self.spans.borrow();
                 let buf = view.buffer();
+                let is_dark = libadwaita::StyleManager::default().is_dark();
 
                 for span in spans.iter() {
                     if let (Some(start_iter), Some(end_iter)) = (
@@ -45,21 +46,50 @@ mod imp {
                         buf.iter_at_line_offset(span.line, span.end_char),
                     ) {
                         let start_loc = view.iter_location(&start_iter);
-                        let end_loc = view.iter_location(&end_iter);
+                        let mut end_loc = view.iter_location(&end_iter);
 
-                        let x = (start_loc.x() - 3) as f32;
-                        let y = (start_loc.y() + 1) as f32;
-                        let w = ((end_loc.x() - start_loc.x()) + 6).max(0) as f32;
-                        let h = (start_loc.height() - 2).max(0) as f32;
+                        // If end_loc wrapped to next line (e.g. at line end), clamp to start line
+                        if end_loc.y() > start_loc.y() {
+                            let mut line_end_iter = start_iter;
+                            if !line_end_iter.ends_line() {
+                                line_end_iter.forward_to_line_end();
+                            }
+                            end_loc = view.iter_location(&line_end_iter);
+                        }
+
+                        let end_x = if end_loc.x() > start_loc.x() {
+                            end_loc.x()
+                        } else {
+                            start_loc.x() + start_loc.width().max(10)
+                        };
+
+                        let text_w = (end_x - start_loc.x()).max(start_loc.width());
+
+                        // Generous horizontal and vertical breathing room for text visibility
+                        let pad_x = 7.0f32;
+                        let pad_y = 3.0f32;
+
+                        let x = start_loc.x() as f32 - pad_x;
+                        let y = start_loc.y() as f32 - pad_y;
+                        let w = text_w as f32 + pad_x * 2.0;
+                        let h = start_loc.height() as f32 + pad_y * 2.0;
 
                         if w > 0.0 && h > 0.0 {
                             let rect = graphene::Rect::new(x, y, w, h);
-                            let rounded = gsk::RoundedRect::from_rect(rect, 5.0);
+                            let rounded = gsk::RoundedRect::from_rect(rect, 6.0);
 
-                            let bg_color = if span.is_deletion {
-                                gdk::RGBA::new(0.72, 0.11, 0.15, 0.95)
+                            let bg_color = if is_dark {
+                                if span.is_deletion {
+                                    gdk::RGBA::new(0.78, 0.12, 0.16, 0.95)
+                                } else {
+                                    gdk::RGBA::new(0.02, 0.60, 0.38, 0.95)
+                                }
                             } else {
-                                gdk::RGBA::new(0.0, 0.53, 0.35, 0.95)
+                                if span.is_deletion {
+                                    gdk::RGBA::new(0.85, 0.15, 0.20, 0.98) // Vibrant clean ruby red for light theme
+                                } else {
+                                    gdk::RGBA::new(0.08, 0.62, 0.35, 0.98) // Vibrant clean emerald for light theme
+                                }
                             };
 
                             snapshot.push_rounded_clip(&rounded);

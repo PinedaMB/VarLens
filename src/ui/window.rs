@@ -190,14 +190,28 @@ impl VarDiffWindow {
         let imp = self.imp();
 
         // 1. Setup Line & Inline Word Diff Tags
+        let style_manager = adw::StyleManager::default();
+        let is_dark_init = style_manager.is_dark();
+        let (del_bg, ins_bg) = if is_dark_init {
+            (
+                gdk::RGBA::new(0.92, 0.15, 0.18, 0.20),
+                gdk::RGBA::new(0.0, 0.62, 0.35, 0.20),
+            )
+        } else {
+            (
+                gdk::RGBA::new(0.96, 0.32, 0.35, 0.14),
+                gdk::RGBA::new(0.10, 0.68, 0.35, 0.14),
+            )
+        };
+
         let tag_del = gtk4::TextTag::builder()
             .name("diff-deleted")
-            .paragraph_background_rgba(&gdk::RGBA::new(0.92, 0.15, 0.18, 0.20))
+            .paragraph_background_rgba(&del_bg)
             .build();
 
         let tag_ins = gtk4::TextTag::builder()
             .name("diff-inserted")
-            .paragraph_background_rgba(&gdk::RGBA::new(0.0, 0.62, 0.35, 0.20))
+            .paragraph_background_rgba(&ins_bg)
             .build();
 
         let tag_span_del = gtk4::TextTag::builder()
@@ -221,25 +235,38 @@ impl VarDiffWindow {
         right_buf.tag_table().add(&tag_ins);
         right_buf.tag_table().add(&tag_span_ins);
 
-        imp.tag_deleted.set(tag_del).ok();
-        imp.tag_inserted.set(tag_ins).ok();
+        imp.tag_deleted.set(tag_del.clone()).ok();
+        imp.tag_inserted.set(tag_ins.clone()).ok();
         imp.tag_span_deleted.set(tag_span_del).ok();
         imp.tag_span_inserted.set(tag_span_ins).ok();
 
         // 2. Configure Style Schemes & Dark/Light Mode Adaptivity
-        let style_manager = adw::StyleManager::default();
         Self::apply_schemes(
             &left_buf,
             &right_buf,
             &inspector_buf,
-            style_manager.is_dark(),
+            is_dark_init,
         );
 
         let lb_clone = left_buf.clone();
         let rb_clone = right_buf.clone();
         let ib_clone = inspector_buf.clone();
+        let tag_del_clone = tag_del;
+        let tag_ins_clone = tag_ins;
+        let sdl_clone = imp.source_diff_left.get();
+        let sdr_clone = imp.source_diff_right.get();
         style_manager.connect_dark_notify(move |sm| {
-            Self::apply_schemes(&lb_clone, &rb_clone, &ib_clone, sm.is_dark());
+            let is_dark = sm.is_dark();
+            Self::apply_schemes(&lb_clone, &rb_clone, &ib_clone, is_dark);
+            if is_dark {
+                tag_del_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.92, 0.15, 0.18, 0.20)));
+                tag_ins_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.0, 0.62, 0.35, 0.20)));
+            } else {
+                tag_del_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.96, 0.32, 0.35, 0.14)));
+                tag_ins_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.10, 0.68, 0.35, 0.14)));
+            }
+            sdl_clone.queue_draw();
+            sdr_clone.queue_draw();
         });
 
         // 3. Set Initial Syntax Highlighting Languages

@@ -26,8 +26,10 @@ fn main() -> glib::ExitCode {
     // Register custom style schemes
     let cache_dir = std::env::temp_dir().join("varlens/styles");
     let _ = std::fs::create_dir_all(&cache_dir);
-    let style_file = cache_dir.join("varlens-dark.xml");
-    let _ = std::fs::write(&style_file, include_str!("../data/styles/varlens-dark.xml"));
+    let style_dark = cache_dir.join("varlens-dark.xml");
+    let _ = std::fs::write(&style_dark, include_str!("../data/styles/varlens-dark.xml"));
+    let style_light = cache_dir.join("varlens-light.xml");
+    let _ = std::fs::write(&style_light, include_str!("../data/styles/varlens-light.xml"));
 
     let scheme_mgr = sourceview5::StyleSchemeManager::default();
     scheme_mgr.append_search_path("data/styles");
