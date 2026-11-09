@@ -21,11 +21,19 @@ def main():
             name = pkg["name"]
             version = pkg["version"]
             checksum = pkg["checksum"]
+            dest = f"cargo-crates/{name}-{version}"
             sources.append({
-                "type": "file",
+                "type": "archive",
+                "archive-type": "tar-gzip",
                 "url": f"https://static.crates.io/crates/{name}/{name}-{version}.crate",
                 "sha256": checksum,
-                "dest": f"cargo-crates/{name}-{version}"
+                "dest": dest
+            })
+            sources.append({
+                "type": "inline",
+                "contents": json.dumps({"package": checksum, "files": {}}),
+                "dest": dest,
+                "dest-filename": ".cargo-checksum.json"
             })
 
     # Cargo vendor redirection config
