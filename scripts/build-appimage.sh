@@ -19,14 +19,14 @@ mkdir -p "$APP_DIR/usr/share/metainfo"
 cp target/release/varlens "$APP_DIR/usr/bin/"
 
 # Copy desktop and icon assets
-cp data/io.github.varlens.App.desktop "$APP_DIR/usr/share/applications/"
-cp data/icons/hicolor/scalable/apps/io.github.varlens.App.svg "$APP_DIR/usr/share/icons/hicolor/scalable/apps/"
-cp data/io.github.varlens.App.metainfo.xml "$APP_DIR/usr/share/metainfo/"
+cp data/io.github.PinedaMB.VarLens.desktop "$APP_DIR/usr/share/applications/"
+cp data/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg "$APP_DIR/usr/share/icons/hicolor/scalable/apps/"
+cp data/io.github.PinedaMB.VarLens.metainfo.xml "$APP_DIR/usr/share/metainfo/"
 
 # Root level AppDir links/files required by AppImage standard
-cp data/io.github.varlens.App.desktop "$APP_DIR/"
-cp data/icons/hicolor/scalable/apps/io.github.varlens.App.svg "$APP_DIR/io.github.varlens.App.svg"
-cp data/icons/hicolor/scalable/apps/io.github.varlens.App.svg "$APP_DIR/.DirIcon"
+cp data/io.github.PinedaMB.VarLens.desktop "$APP_DIR/"
+cp data/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg "$APP_DIR/io.github.PinedaMB.VarLens.svg"
+cp data/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg "$APP_DIR/.DirIcon"
 
 # AppRun launcher
 cat << 'EOF' > "$APP_DIR/AppRun"

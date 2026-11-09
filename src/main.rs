@@ -9,7 +9,7 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 use ui::window::VarDiffWindow;
 
-const APP_ID: &str = "io.github.varlens.App";
+const APP_ID: &str = "io.github.PinedaMB.VarLens";
 
 fn main() -> glib::ExitCode {
     // If GSK_RENDERER is not explicitly specified, prefer cairo or gl to avoid Vulkan swapchain OOM crashes on Linux
@@ -66,10 +66,10 @@ fn main() -> glib::ExitCode {
                 let active_win = app.active_window();
                 let about = adw::AboutDialog::builder()
                     .application_name("VarLens")
-                    .application_icon("io.github.varlens.App")
+                    .application_icon("io.github.PinedaMB.VarLens")
                     .developer_name("VarLens Team")
                     .version("1.0.0")
-                    .website("https://github.com/varlens/varlens")
+                    .website("https://github.com/PinedaMB/VarLens")
                     .license_type(gtk4::License::MitX11)
                     .comments(tr!(
                         "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, explorar árboles de datos, convertir salidas de var_dump() y print_r() de PHP y comparar diffs visualmente.",

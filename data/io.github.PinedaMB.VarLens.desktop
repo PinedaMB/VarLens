@@ -2,7 +2,7 @@
 Name=VarLens
 Comment=JSON Formatter, PHP var_dump Converter and Diff Tool
 Exec=varlens
-Icon=io.github.varlens.App
+Icon=io.github.PinedaMB.VarLens
 Terminal=false
 Type=Application
 Categories=Development;Utility;TextEditor;

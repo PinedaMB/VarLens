@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.varlens.App</id>
+  <id>io.github.PinedaMB.VarLens</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>VarLens</name>
   <summary>Modern developer lens for JSON, XML, PHP var_dump and visual Diff inspection</summary>
+  <developer id="io.github.pinedamb">
+    <name>VarLens Developers</name>
+  </developer>
   <description>
     <p>
       VarLens is a fast, native Linux developer desktop application built with Rust, GTK4, and Libadwaita.
@@ -19,11 +22,28 @@
       <li>Full internationalization (i18n) with live runtime switching between English and Spanish.</li>
     </ul>
   </description>
-  <url type="homepage">https://github.com/varlens/varlens</url>
-  <launchable type="desktop-id">io.github.varlens.App.desktop</launchable>
+  <url type="homepage">https://github.com/PinedaMB/VarLens</url>
+  <launchable type="desktop-id">io.github.PinedaMB.VarLens.desktop</launchable>
   <provides>
     <binary>varlens</binary>
   </provides>
+  <content_rating type="oars-1.1" />
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/tree-view.png</image>
+      <caption>Interactive JSON Tree exploration and live node filtering</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/diff-view.png</image>
+      <caption>Side-by-side visual diff comparator with token highlighting</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/main/screenshots/inspector-vardump.png</image>
+      <caption>PHP var_dump and print_r raw array parser</caption>
+    </screenshot>
+  </screenshots>
+
   <releases>
     <release version="1.0.0" date="2026-11-08">
       <description>

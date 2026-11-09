@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="data/icons/hicolor/scalable/apps/io.github.varlens.App.svg" width="128" height="128" alt="VarLens Logo" />
+<img src="data/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg" width="128" height="128" alt="VarLens Logo" />
 
 # VarLens
 
 ### The modern, blazing-fast native Linux developer lens for inspecting, visualizing, converting, and diffing structured data.
 
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/varlens/varlens/releases)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/PinedaMB/VarLens/releases)
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![GTK4](https://img.shields.io/badge/GTK-4.12+-green.svg)](https://gtk.org)
 [![Libadwaita](https://img.shields.io/badge/libadwaita-1.5+-purple.svg)](https://gnome.pages.gitlab.gnome.org/libadwaita)
@@ -135,8 +135,8 @@ sudo pacman -S rust gtk4 libadwaita gtksourceview5
 
 ```bash
 # Clone the repository
-git clone https://github.com/varlens/varlens.git
-cd varlens
+git clone https://github.com/PinedaMB/VarLens.git
+cd VarLens
 
 # Run test suite
 cargo test
@@ -161,12 +161,12 @@ To install VarLens locally for your user account:
 install -Dm755 target/release/varlens ~/.local/bin/varlens
 
 # Install application icon
-install -Dm644 data/icons/hicolor/scalable/apps/io.github.varlens.App.svg \
-  ~/.local/share/icons/hicolor/scalable/apps/io.github.varlens.App.svg
+install -Dm644 data/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg \
+  ~/.local/share/icons/hicolor/scalable/apps/io.github.PinedaMB.VarLens.svg
 
 # Install desktop entry and AppStream metadata
-install -Dm644 data/io.github.varlens.App.desktop ~/.local/share/applications/io.github.varlens.App.desktop
-install -Dm644 data/io.github.varlens.App.metainfo.xml ~/.local/share/metainfo/io.github.varlens.App.metainfo.xml
+install -Dm644 data/io.github.PinedaMB.VarLens.desktop ~/.local/share/applications/io.github.PinedaMB.VarLens.desktop
+install -Dm644 data/io.github.PinedaMB.VarLens.metainfo.xml ~/.local/share/metainfo/io.github.PinedaMB.VarLens.metainfo.xml
 
 # Refresh icon cache and desktop database
 gtk4-update-icon-cache -f -t ~/.local/share/icons/hicolor
@@ -178,7 +178,7 @@ update-desktop-database ~/.local/share/applications
 ## 🤝 Contributing
 
 Contributions, bug reports, and suggestions are welcome!
-Feel free to open an issue or submit a pull request on [GitHub](https://github.com/varlens/varlens).
+Feel free to open an issue or submit a pull request on [GitHub](https://github.com/PinedaMB/VarLens).
 
 ---
 
