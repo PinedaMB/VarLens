@@ -4,17 +4,19 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>VarLens</name>
-  <summary>Herramienta para formatear JSON, parsear var_dump de PHP y comparar diffs</summary>
+  <summary>Modern developer lens for JSON, XML, PHP var_dump and visual Diff inspection</summary>
   <description>
     <p>
-      VarLens es una aplicación nativa para Linux desarrollada en Rust con GTK4 y Libadwaita.
-      Ofrece a los desarrolladores herramientas esenciales para la manipulación y análisis de datos:
+      VarLens is a fast, native Linux developer desktop application built with Rust, GTK4, and Libadwaita.
+      It empowers developers to inspect, format, explore, and diff structured data efficiently:
     </p>
     <ul>
-      <li>Formateo y validación de JSON en modo legible (Prettify) o compacto (Minify).</li>
-      <li>Conversión de volcados PHP var_dump() complejos y anidados a formato JSON estructurado.</li>
-      <li>Comparador visual de diferencias lado a lado (Side-by-Side) con algoritmos Myers y Patience.</li>
-      <li>Concurrencia asíncrona no bloqueante para grandes archivos de texto.</li>
+      <li>High-performance JSON and XML formatting with configurable indentation (2 spaces, 4 spaces, tabs) and minification.</li>
+      <li>Interactive JSON Tree Explorer with collapsible nodes, live query search, and instant access path copying.</li>
+      <li>Robust Pest PEG parser for PHP var_dump() and print_r() Array raw outputs into structured JSON.</li>
+      <li>Visual Side-by-Side Diff comparator with Myers and Patience algorithms, and token-level change highlights.</li>
+      <li>Zero-lag non-blocking asynchronous processing for large payloads.</li>
+      <li>Full internationalization (i18n) with live runtime switching between English and Spanish.</li>
     </ul>
   </description>
   <url type="homepage">https://github.com/varlens/varlens</url>
@@ -22,4 +24,11 @@
   <provides>
     <binary>varlens</binary>
   </provides>
+  <releases>
+    <release version="1.0.0" date="2026-11-08">
+      <description>
+        <p>Initial official production release of VarLens.</p>
+      </description>
+    </release>
+  </releases>
 </component>

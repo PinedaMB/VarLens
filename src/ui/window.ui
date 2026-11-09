@@ -12,14 +12,14 @@
         <attribute name="action">win.show-help-overlay</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Acerca de VarDiff</attribute>
+        <attribute name="label" translatable="yes">Acerca de VarLens</attribute>
         <attribute name="action">app.about</attribute>
       </item>
     </section>
   </menu>
 
   <template class="VarDiffWindow" parent="AdwApplicationWindow">
-    <property name="title" translatable="yes">VarDiff</property>
+    <property name="title" translatable="yes">VarLens</property>
     <property name="default-width">1200</property>
     <property name="default-height">780</property>
     <property name="content">
@@ -55,7 +55,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">VarDiff</property>
+                    <property name="label">VarLens</property>
                     <style>
                       <class name="heading"/>
                     </style>
@@ -63,7 +63,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">v1.2.0</property>
+                    <property name="label">v1.0.0</property>
                     <style>
                       <class name="badge-pill"/>
                     </style>
@@ -943,7 +943,7 @@
                     </child>
                     <child>
                       <object class="GtkLabel">
-                        <property name="label">VarDiff AST Engine</property>
+                        <property name="label">VarLens AST Engine</property>
                         <style>
                           <class name="caption"/>
                           <class name="dim-label"/>

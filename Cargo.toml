@@ -1,9 +1,14 @@
 [package]
 name = "varlens"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["VarLens Developer"]
-description = "Linux native developer tool for JSON formatting, PHP var_dump parsing, and Diff viewing"
+authors = ["VarLens Developers"]
+description = "Modern Linux native developer tool for JSON formatting, interactive tree exploration, PHP var_dump/print_r conversion, and AST diff comparison"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/varlens/varlens"
+keywords = ["json", "diff", "vardump", "gtk4", "libadwaita"]
+categories = ["development-tools", "gui"]
 
 [dependencies]
 gtk4 = { version = "0.11.5", features = ["v4_12"] }
@@ -14,3 +19,10 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 pest = "2.9.5"
 pest_derive = "2.9.5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -9,7 +9,7 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 use ui::window::VarDiffWindow;
 
-const APP_ID: &str = "io.github.vardiff.App";
+const APP_ID: &str = "io.github.varlens.App";
 
 fn main() -> glib::ExitCode {
     // If GSK_RENDERER is not explicitly specified, prefer cairo or gl to avoid Vulkan swapchain OOM crashes on Linux
@@ -65,17 +65,17 @@ fn main() -> glib::ExitCode {
             if let Some(app) = app_weak.upgrade() {
                 let active_win = app.active_window();
                 let about = adw::AboutDialog::builder()
-                    .application_name("VarDiff")
+                    .application_name("VarLens")
                     .application_icon("io.github.varlens.App")
-                    .developer_name("VarDiff Team")
-                    .version("1.2.0")
-                    .website("https://github.com/varlens/vardiff")
+                    .developer_name("VarLens Team")
+                    .version("1.0.0")
+                    .website("https://github.com/varlens/varlens")
                     .license_type(gtk4::License::MitX11)
                     .comments(tr!(
-                        "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, convertir salidas de var_dump() de PHP y comparar diffs visualmente.",
-                        "Native Linux developer tool for JSON formatting & validation, PHP var_dump conversion, and visual diff inspection."
+                        "Herramienta de desarrollo nativa para Linux para formatear y validar JSON, explorar árboles de datos, convertir salidas de var_dump() y print_r() de PHP y comparar diffs visualmente.",
+                        "Native Linux developer tool for JSON formatting & validation, interactive tree exploration, PHP var_dump() and print_r() conversion, and visual diff inspection."
                     ))
-                    .developers(vec!["VarDiff Developers"])
+                    .developers(vec!["VarLens Developers"])
                     .build();
                 about.present(active_win.as_ref());
             }
