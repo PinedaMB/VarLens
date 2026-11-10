@@ -1,6 +1,6 @@
 use crate::core::diff::{compute_diff_ext, DiffSummary};
 use crate::core::json::{
-    analyze_json, count_lines, format_json_with_indent, IndentStyle,
+    analyze_json, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
 };
 use crate::core::vardump::{is_printr_raw, parse_vardump, vardump_to_json_string};
 use crate::core::xml::{analyze_xml, format_xml_with_indent, xml_to_json_string};
@@ -18,6 +18,7 @@ use libadwaita::prelude::*;
 use libadwaita::subclass::prelude::*;
 use sourceview5::prelude::*;
 use std::cell::{Cell, OnceCell, RefCell};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -26,7 +27,11 @@ use std::time::Duration;
 const ASYNC_LINE_THRESHOLD: usize = 1000;
 
 enum WorkerResult {
-    InspectorFormatted { text: String, message: String },
+    InspectorFormatted {
+        text: String,
+        message: String,
+        is_xml: bool,
+    },
     DiffCalculated(DiffSummary),
     Error(String),
 }
@@ -56,6 +61,14 @@ mod imp {
         // Top Header widgets
         #[template_child]
         pub btn_open: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_save: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_load_demo: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_theme_toggle: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_primary_menu: TemplateChild<gtk4::MenuButton>,
 
         // Diff page widgets
         #[template_child]
@@ -66,6 +79,12 @@ mod imp {
         pub btn_diff_next: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_run_diff: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_swap_diff: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_normalize_diff: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_copy_patch: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_clear_diff: TemplateChild<gtk4::Button>,
         #[template_child]
@@ -95,6 +114,8 @@ mod imp {
         #[template_child]
         pub lbl_diff_count: TemplateChild<gtk4::Label>,
         #[template_child]
+        pub lbl_diff_similarity: TemplateChild<gtk4::Label>,
+        #[template_child]
         pub lbl_detect_mode: TemplateChild<gtk4::Label>,
         #[template_child]
         pub sw_ignore_whitespace: TemplateChild<gtk4::Switch>,
@@ -105,6 +126,10 @@ mod imp {
         #[template_child]
         pub lbl_diff_additions: TemplateChild<gtk4::Label>,
         #[template_child]
+        pub lbl_diff_sync: TemplateChild<gtk4::Label>,
+        #[template_child]
+        pub lbl_diff_encoding: TemplateChild<gtk4::Label>,
+        #[template_child]
         pub lbl_diff_cursor: TemplateChild<gtk4::Label>,
 
         // Inspector page widgets
@@ -114,6 +139,8 @@ mod imp {
         pub source_map: TemplateChild<sourceview5::Map>,
         #[template_child]
         pub lbl_syntax_valid: TemplateChild<gtk4::Label>,
+        #[template_child]
+        pub entry_search_inspector: TemplateChild<gtk4::SearchEntry>,
         #[template_child]
         pub dd_indent: TemplateChild<gtk4::DropDown>,
         #[template_child]
@@ -128,6 +155,8 @@ mod imp {
         pub btn_vardump_to_json: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_minify_json: TemplateChild<gtk4::Button>,
+        #[template_child]
+        pub btn_sort_keys: TemplateChild<gtk4::Button>,
         #[template_child]
         pub btn_mode_json: TemplateChild<gtk4::ToggleButton>,
         #[template_child]
@@ -191,12 +220,14 @@ mod imp {
         pub tag_span_deleted: OnceCell<gtk4::TextTag>,
         pub tag_span_inserted: OnceCell<gtk4::TextTag>,
         pub hunk_positions: RefCell<Vec<(usize, usize)>>,
+        pub last_unified_diff: RefCell<String>,
         pub current_hunk_idx: Cell<usize>,
         pub diff_debounce_source: RefCell<Option<glib::SourceId>>,
         pub fold_inspector: OnceCell<FoldingController>,
         pub fold_diff_left: OnceCell<FoldingController>,
         pub fold_diff_right: OnceCell<FoldingController>,
         pub json_tree: OnceCell<crate::ui::json_tree::JsonTreeView>,
+        pub search_context: OnceCell<sourceview5::SearchContext>,
     }
 
     #[glib::object_subclass]
@@ -382,6 +413,8 @@ impl VarDiffWindow {
         // 9. Register Window Actions & Shortcuts
         self.setup_actions();
         self.setup_shortcuts();
+        self.setup_code_search();
+        self.setup_drag_and_drop();
 
         // 10. Start with clean editors and initialize metrics & language texts
         self.update_ui_texts();
@@ -579,9 +612,15 @@ impl VarDiffWindow {
         imp.pref_line_numbers.connect_active_notify(move |row| {
             let active = row.is_active();
             let imp = win_p_ln.imp();
-            imp.source_diff_left.set_show_line_numbers(active);
-            imp.source_diff_right.set_show_line_numbers(active);
-            imp.source_inspector.set_show_line_numbers(active);
+            if let Some(ctrl) = imp.fold_diff_left.get() {
+                ctrl.set_line_numbers_visible(active);
+            }
+            if let Some(ctrl) = imp.fold_diff_right.get() {
+                ctrl.set_line_numbers_visible(active);
+            }
+            if let Some(ctrl) = imp.fold_inspector.get() {
+                ctrl.set_line_numbers_visible(active);
+            }
         });
 
         let win_p_map = self.clone();
@@ -637,9 +676,41 @@ impl VarDiffWindow {
         imp.page_inspector.set_title(Some(tr!("Inspector", "Inspector")));
         imp.page_preferences.set_title(Some(tr!("Preferencias", "Preferences")));
 
-        // 2. Headerbar
+        // 2. Headerbar & Primary Menu
         imp.btn_open.set_label(tr!("Abrir", "Open"));
         imp.btn_open.set_tooltip_text(Some(tr!("Abrir archivo (Ctrl+O)", "Open file (Ctrl+O)")));
+        imp.btn_save.set_tooltip_text(Some(tr!("Guardar archivo (Ctrl+S)", "Save file (Ctrl+S)")));
+        imp.btn_load_demo.set_label(tr!("Demo", "Demo"));
+        imp.btn_load_demo.set_tooltip_text(Some(tr!(
+            "Cargar datos de demostración en la vista actual",
+            "Load demo payload into active view"
+        )));
+        imp.btn_theme_toggle.set_tooltip_text(Some(tr!(
+            "Alternar tema Claro / Oscuro",
+            "Toggle Light / Dark theme"
+        )));
+        imp.btn_primary_menu.set_tooltip_text(Some(tr!("Menú principal", "Main menu")));
+        imp.btn_load_demo.set_tooltip_text(Some(tr!(
+            "Cargar ejemplo interactivo (Demo)",
+            "Load interactive demo example"
+        )));
+        imp.btn_theme_toggle.set_tooltip_text(Some(tr!(
+            "Alternar tema Claro / Oscuro",
+            "Toggle Light / Dark theme"
+        )));
+
+        let menu = gio::Menu::new();
+        let sec1 = gio::Menu::new();
+        sec1.append(Some(tr!("Apoyar proyecto ❤️", "Support project ❤️")), Some("app.sponsor"));
+        menu.append_section(None, &sec1);
+        let sec2 = gio::Menu::new();
+        sec2.append(
+            Some(tr!("Atajos del teclado y detalles", "Keyboard shortcuts & details")),
+            Some("win.show-help-overlay"),
+        );
+        sec2.append(Some(tr!("Acerca de VarLens", "About VarLens")), Some("app.about"));
+        menu.append_section(None, &sec2);
+        imp.btn_primary_menu.set_menu_model(Some(&menu));
 
         // 3. Diff controls
         imp.btn_diff_prev.set_label(tr!("Anterior", "Previous"));
@@ -648,11 +719,34 @@ impl VarDiffWindow {
         imp.btn_diff_next.set_tooltip_text(Some(tr!("Siguiente diferencia (Ctrl+])", "Next difference (Ctrl+])")));
         imp.btn_run_diff.set_label(tr!("Comparar", "Compare"));
         imp.btn_run_diff.set_tooltip_text(Some(tr!("Recalcular diferencias", "Recalculate differences")));
+        imp.btn_swap_diff.set_tooltip_text(Some(tr!(
+            "Intercambiar paneles Izquierdo ↔ Derecho",
+            "Swap Left ↔ Right panels"
+        )));
+        imp.btn_normalize_diff.set_tooltip_text(Some(tr!(
+            "Formatear y normalizar ambos paneles antes de comparar",
+            "Format and normalize both panels before comparing"
+        )));
+        imp.btn_copy_patch.set_tooltip_text(Some(tr!(
+            "Copiar Unified Diff (.patch) al portapapeles",
+            "Copy Unified Diff (.patch) to clipboard"
+        )));
         imp.btn_clear_diff.set_label(tr!("Limpiar", "Clear"));
         imp.lbl_ignore_whitespace.set_label(tr!("Ignorar espacios", "Ignore whitespace"));
+        imp.lbl_diff_sync.set_label(tr!("↻ Diferencias sincronizadas", "↻ Differences synchronized"));
+        imp.lbl_diff_encoding.set_label(tr!("UTF-8  •  JSON  •  Espacios: 2", "UTF-8  •  JSON  •  Spaces: 2"));
 
         imp.lbl_title_original.set_label(tr!("Original (Base)", "Original (Base)"));
         imp.lbl_title_modified.set_label(tr!("Modificado (Nuevo)", "Modified (New)"));
+        if imp.lbl_left_file.label() == "Sin archivo" || imp.lbl_left_file.label() == "No file" {
+            imp.lbl_left_file.set_label(tr!("Sin archivo", "No file"));
+        }
+        if imp.lbl_right_file.label() == "Sin archivo" || imp.lbl_right_file.label() == "No file" {
+            imp.lbl_right_file.set_label(tr!("Sin archivo", "No file"));
+        }
+        if imp.lbl_inspector_file.label() == "Sin archivo" || imp.lbl_inspector_file.label() == "No file" {
+            imp.lbl_inspector_file.set_label(tr!("Sin archivo", "No file"));
+        }
         imp.btn_copy_left.set_tooltip_text(Some(tr!("Copiar código original", "Copy original code")));
         imp.btn_paste_left.set_tooltip_text(Some(tr!("Pegar del portapapeles", "Paste from clipboard")));
         imp.btn_load_left.set_tooltip_text(Some(tr!("Cargar archivo base", "Load base file")));
@@ -665,6 +759,14 @@ impl VarDiffWindow {
         imp.btn_paste_inspector.set_tooltip_text(Some(tr!("Pegar", "Paste")));
         imp.btn_copy_inspector.set_tooltip_text(Some(tr!("Copiar", "Copy")));
         imp.btn_clear_inspector.set_tooltip_text(Some(tr!("Limpiar contenido", "Clear content")));
+        imp.btn_sort_keys.set_tooltip_text(Some(tr!(
+            "Ordenar claves JSON alfabéticamente (A→Z)",
+            "Sort JSON keys alphabetically (A→Z)"
+        )));
+        imp.entry_search_inspector.set_placeholder_text(Some(tr!(
+            "Buscar en código (Ctrl+F)...",
+            "Search in code (Ctrl+F)..."
+        )));
         imp.btn_insp_view_code.set_tooltip_text(Some(tr!("Vista de Código / Editor", "Code / Editor View")));
         imp.btn_insp_view_tree.set_tooltip_text(Some(tr!("Vista de Árbol Interactivo (Explorar nodos)", "Interactive Tree View (Explore nodes)")));
 
@@ -677,6 +779,7 @@ impl VarDiffWindow {
         ]);
         imp.dd_indent.set_model(Some(&indent_model));
         imp.dd_indent.set_selected(current_indent);
+        imp.lbl_indent_info.set_label(&format!("UTF-8  |  {}", self.current_indent_style().label()));
 
         // 5. Preferences
         imp.grp_pref_general.set_title(tr!("General / Idioma", "General / Language"));
@@ -713,73 +816,150 @@ impl VarDiffWindow {
         let imp = self.imp();
         let map = imp.source_map.get();
         let insp = imp.source_inspector.get();
+
+        // Prevent the minimap TextView from taking focus or running GtkSourceMap's
+        // built-in GestureClick (which claims the sequence on press and kills GestureDrag).
+        map.set_can_focus(false);
+        map.set_editable(false);
+        let controllers = map.observe_controllers();
+        for i in 0..controllers.n_items() {
+            if let Some(ctrl) = controllers.item(i).and_downcast::<gtk4::EventController>() {
+                if ctrl.is::<gtk4::Gesture>() || ctrl.is::<gtk4::EventControllerScroll>() {
+                    ctrl.set_propagation_phase(gtk4::PropagationPhase::None);
+                }
+            }
+        }
+
         let map_weak = map.downgrade();
         let insp_weak = insp.downgrade();
+        let grab_offset: Rc<Cell<f64>> = Rc::new(Cell::new(0.0));
 
-        let scroll_to_pos = move |y: f64| {
-            if let (Some(map), Some(insp)) = (map_weak.upgrade(), insp_weak.upgrade()) {
-                let map_h = map.height() as f64;
-                if map_h <= 0.0 {
-                    return;
-                }
+        let compute_metrics = move || -> Option<(
+            sourceview5::Map,
+            sourceview5::View,
+            gtk4::Adjustment,
+            f64,
+            f64,
+            f64,
+            f64,
+        )> {
+            let map = map_weak.upgrade()?;
+            let insp = insp_weak.upgrade()?;
+            let vadj = insp.vadjustment()?;
 
-                // Obtener o calcular la altura real del deslizador (slider)
-                let slider_h = map
-                    .first_child()
-                    .map(|c| c.height() as f64)
-                    .filter(|&h| h > 10.0)
-                    .unwrap_or_else(|| {
-                        if let Some(vadj) = insp.vadjustment() {
-                            let total = vadj.upper() - vadj.lower();
-                            if total > 0.0 {
-                                ((vadj.page_size() / total) * map_h).clamp(24.0, map_h)
-                            } else {
-                                30.0
-                            }
-                        } else {
-                            30.0
-                        }
-                    });
-
-                // Centrar el deslizador en la posición exacta del cursor
-                let available_h = (map_h - slider_h).max(1.0);
-                let ratio = ((y - slider_h * 0.5) / available_h).clamp(0.0, 1.0);
-
-                if let Some(vadj) = insp.vadjustment() {
-                    let max_scroll = (vadj.upper() - vadj.page_size()).max(vadj.lower());
-                    let target_val = vadj.lower() + ratio * (max_scroll - vadj.lower());
-                    vadj.set_value(target_val);
-                }
-
-                let buf = insp.buffer();
-                let total_lines = buf.line_count();
-                if total_lines > 0 {
-                    let target_line = ((total_lines - 1) as f64 * ratio).round() as i32;
-                    if let Some(iter) = buf.iter_at_line(target_line) {
-                        buf.place_cursor(&iter);
-                    }
-                }
-
-                map.queue_draw();
+            let map_h = map.height() as f64;
+            if map_h <= 0.0 {
+                return None;
             }
+
+            let lower = vadj.lower();
+            let upper = vadj.upper();
+            let page_size = vadj.page_size();
+            let max_scroll = (upper - page_size).max(lower);
+            if max_scroll <= lower {
+                return None;
+            }
+
+            let map_buf = map.buffer();
+            let end_rect = map.iter_location(&map_buf.end_iter());
+            let map_content_h = ((end_rect.y() + end_rect.height()) as f64).max(1.0);
+            let track_h = map_h.min(map_content_h).max(1.0);
+
+            let slider_h = ((page_size / (upper - lower).max(1.0)) * track_h).clamp(16.0, track_h);
+            let available_h = (track_h - slider_h).max(1.0);
+
+            Some((map, insp, vadj, lower, max_scroll, slider_h, available_h))
+        };
+
+        let compute_for_begin = compute_metrics.clone();
+        let compute_for_update = compute_metrics;
+
+        let apply_scroll = |map: &sourceview5::Map,
+                            vadj: &gtk4::Adjustment,
+                            lower: f64,
+                            max_scroll: f64,
+                            available_h: f64,
+                            y: f64,
+                            offset_in_slider: f64| {
+            let target_slider_y = y - offset_in_slider;
+            let ratio = (target_slider_y / available_h).clamp(0.0, 1.0);
+            let target_val = lower + ratio * (max_scroll - lower);
+            vadj.set_value(target_val);
+
+            if let Some(map_vadj) = map.vadjustment() {
+                let map_lower = map_vadj.lower();
+                let map_max = (map_vadj.upper() - map_vadj.page_size()).max(map_lower);
+                if map_max > map_lower {
+                    map_vadj.set_value(map_lower + ratio * (map_max - map_lower));
+                }
+            }
+            map.queue_resize();
+            map.queue_draw();
         };
 
         let drag = gtk4::GestureDrag::new();
+        drag.set_button(gtk4::gdk::BUTTON_PRIMARY);
         drag.set_propagation_phase(gtk4::PropagationPhase::Capture);
 
-        let on_begin = scroll_to_pos.clone();
-        let insp_focus = insp.clone();
-        drag.connect_drag_begin(move |gesture, _x, y| {
+        let grab_begin = grab_offset.clone();
+        drag.connect_drag_begin(move |gesture, _x, start_y| {
             gesture.set_state(gtk4::EventSequenceState::Claimed);
-            insp_focus.grab_focus();
-            on_begin(y);
+            if let Some((map, _insp, vadj, lower, max_scroll, slider_h, available_h)) =
+                compute_for_begin()
+            {
+                let mut child_opt = map.first_child();
+                while let Some(child) = child_opt {
+                    if child.css_name() == "slider" {
+                        child.add_css_class("dragging");
+                    }
+                    child_opt = child.next_sibling();
+                }
+
+                let cur_ratio = ((vadj.value() - lower) / (max_scroll - lower)).clamp(0.0, 1.0);
+                let cur_slider_y = cur_ratio * available_h;
+
+                if start_y >= cur_slider_y && start_y <= cur_slider_y + slider_h {
+                    // Clicked inside the slider: preserve relative grab offset
+                    grab_begin.set(start_y - cur_slider_y);
+                } else {
+                    // Clicked outside the slider: center slider at click position and jump
+                    let half = slider_h * 0.5;
+                    grab_begin.set(half);
+                    apply_scroll(&map, &vadj, lower, max_scroll, available_h, start_y, half);
+                }
+            }
         });
 
-        let on_update = scroll_to_pos.clone();
+        let grab_update = grab_offset;
         drag.connect_drag_update(move |gesture, _offset_x, offset_y| {
             gesture.set_state(gtk4::EventSequenceState::Claimed);
             if let Some((_start_x, start_y)) = gesture.start_point() {
-                on_update(start_y + offset_y);
+                if let Some((map, _insp, vadj, lower, max_scroll, _slider_h, available_h)) =
+                    compute_for_update()
+                {
+                    apply_scroll(
+                        &map,
+                        &vadj,
+                        lower,
+                        max_scroll,
+                        available_h,
+                        start_y + offset_y,
+                        grab_update.get(),
+                    );
+                }
+            }
+        });
+
+        let map_end_weak = map.downgrade();
+        drag.connect_drag_end(move |_gesture, _offset_x, _offset_y| {
+            if let Some(map) = map_end_weak.upgrade() {
+                let mut child_opt = map.first_child();
+                while let Some(child) = child_opt {
+                    if child.css_name() == "slider" {
+                        child.remove_css_class("dragging");
+                    }
+                    child_opt = child.next_sibling();
+                }
             }
         });
 
@@ -792,7 +972,7 @@ impl VarDiffWindow {
         let insp_scroll = insp.clone();
         scroll_ctrl.connect_scroll(move |_ctrl, _dx, dy| {
             if let Some(vadj) = insp_scroll.vadjustment() {
-                let step = vadj.step_increment().max(20.0);
+                let step = vadj.step_increment().max(24.0);
                 let max_val = (vadj.upper() - vadj.page_size()).max(vadj.lower());
                 let new_val = (vadj.value() + dy * step * 3.0).clamp(vadj.lower(), max_val);
                 vadj.set_value(new_val);
@@ -811,6 +991,16 @@ impl VarDiffWindow {
             let action = gtk4::NamedAction::new("win.open-file");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
+        // Ctrl+S -> win.save-file
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>s") {
+            let action = gtk4::NamedAction::new("win.save-file");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
+        // Ctrl+F -> win.focus-search
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control>f") {
+            let action = gtk4::NamedAction::new("win.focus-search");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
         // Ctrl+Shift+F -> win.format-json
         if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>f") {
             let action = gtk4::NamedAction::new("win.format-json");
@@ -821,11 +1011,12 @@ impl VarDiffWindow {
             let action = gtk4::NamedAction::new("win.minify-json");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
-        // Ctrl+Shift+C / Ctrl+Shift+J -> win.convert-vardump
-        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>c") {
-            let action = gtk4::NamedAction::new("win.convert-vardump");
+        // Ctrl+Shift+S -> win.sort-json-keys
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>s") {
+            let action = gtk4::NamedAction::new("win.sort-json-keys");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
+        // Ctrl+Shift+J -> win.convert-vardump
         if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>j") {
             let action = gtk4::NamedAction::new("win.convert-vardump");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
@@ -835,7 +1026,11 @@ impl VarDiffWindow {
             let action = gtk4::NamedAction::new("win.compute-diff");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
         }
-        // Ctrl+Shift+D -> win.clear-diff
+        // Ctrl+Shift+C / Ctrl+Shift+D -> win.clear-diff
+        if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>c") {
+            let action = gtk4::NamedAction::new("win.clear-diff");
+            controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
+        }
         if let Some(trigger) = gtk4::ShortcutTrigger::parse_string("<Control><Shift>d") {
             let action = gtk4::NamedAction::new("win.clear-diff");
             controller.add_shortcut(gtk4::Shortcut::new(Some(trigger), Some(action)));
@@ -872,6 +1067,113 @@ impl VarDiffWindow {
             self_open.handle_open_file(false);
         });
         self.add_action(&act_open);
+
+        // Save file dialog action
+        let self_save = self.clone();
+        let act_save = gio::SimpleAction::new("save-file", None);
+        act_save.connect_activate(move |_, _| {
+            self_save.handle_save_file();
+        });
+        self.add_action(&act_save);
+
+        // Toggle Light / Dark Theme action
+        let self_theme = self.clone();
+        let act_theme = gio::SimpleAction::new("toggle-theme", None);
+        act_theme.connect_activate(move |_, _| {
+            let sm = adw::StyleManager::default();
+            if sm.is_dark() {
+                sm.set_color_scheme(adw::ColorScheme::ForceLight);
+                self_theme.imp().btn_theme_toggle.set_icon_name("weather-clear-night-symbolic");
+            } else {
+                sm.set_color_scheme(adw::ColorScheme::ForceDark);
+                self_theme.imp().btn_theme_toggle.set_icon_name("weather-clear-symbolic");
+            }
+        });
+        self.add_action(&act_theme);
+
+        // Load interactive Demo payload action
+        let self_demo = self.clone();
+        let act_demo = gio::SimpleAction::new("load-demo", None);
+        act_demo.connect_activate(move |_, _| {
+            self_demo.handle_load_demo();
+        });
+        self.add_action(&act_demo);
+
+        // Focus search bar action (Ctrl+F)
+        let self_fsearch = self.clone();
+        let act_fsearch = gio::SimpleAction::new("focus-search", None);
+        act_fsearch.connect_activate(move |_, _| {
+            let imp = self_fsearch.imp();
+            let active = imp.main_stack.visible_child_name().unwrap_or_default();
+            if active != "inspector_page" {
+                imp.main_stack.set_visible_child_name("inspector_page");
+            }
+            imp.entry_search_inspector.grab_focus();
+        });
+        self.add_action(&act_fsearch);
+
+        // Swap diff panels (Left <-> Right)
+        let self_swap = self.clone();
+        let act_swap = gio::SimpleAction::new("swap-diff", None);
+        act_swap.connect_activate(move |_, _| {
+            let imp = self_swap.imp();
+            let left_buf = imp.source_diff_left.buffer();
+            let right_buf = imp.source_diff_right.buffer();
+            let left_text = left_buf
+                .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
+                .to_string();
+            let right_text = right_buf
+                .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
+                .to_string();
+            let left_file = imp.lbl_left_file.label().to_string();
+            let right_file = imp.lbl_right_file.label().to_string();
+
+            left_buf.set_text(&right_text);
+            right_buf.set_text(&left_text);
+            imp.lbl_left_file.set_label(&right_file);
+            imp.lbl_right_file.set_label(&left_file);
+            self_swap.handle_compute_diff();
+        });
+        self.add_action(&act_swap);
+
+        // Normalize & format both diff panels
+        let self_norm = self.clone();
+        let act_norm = gio::SimpleAction::new("normalize-diff", None);
+        act_norm.connect_activate(move |_, _| {
+            self_norm.handle_normalize_diff();
+        });
+        self.add_action(&act_norm);
+
+        // Copy Unified Diff (.patch)
+        let self_patch = self.clone();
+        let act_patch = gio::SimpleAction::new("copy-unified-diff", None);
+        act_patch.connect_activate(move |_, _| {
+            let imp = self_patch.imp();
+            let patch = imp.last_unified_diff.borrow().clone();
+            if !patch.is_empty() {
+                self_patch.clipboard().set_text(&patch);
+                imp.lbl_diff_sync.set_label(tr!(
+                    "✓ Unified Diff (.patch) copiado al portapapeles",
+                    "✓ Unified Diff (.patch) copied to clipboard"
+                ));
+                let lbl = imp.lbl_diff_sync.clone();
+                glib::timeout_add_local_once(Duration::from_millis(2000), move || {
+                    lbl.set_label(tr!(
+                        "↻ Diferencias sincronizadas",
+                        "↻ Differences synchronized"
+                    ));
+                });
+            }
+        });
+        self.add_action(&act_patch);
+
+        // Sort JSON keys alphabetically (A->Z)
+        let self_sort = self.clone();
+        let act_sort = gio::SimpleAction::new("sort-json-keys", None);
+        act_sort.connect_activate(move |_, _| {
+            self_sort.handle_sort_json_keys();
+        });
+        self.add_action(&act_sort);
 
         // Open specifically into left diff panel
         let self_open_l = self.clone();
@@ -978,12 +1280,16 @@ impl VarDiffWindow {
             let imp = self_clr_diff.imp();
             imp.source_diff_left.buffer().set_text("");
             imp.source_diff_right.buffer().set_text("");
+            imp.lbl_left_file.set_label(tr!("Sin archivo", "No file"));
+            imp.lbl_right_file.set_label(tr!("Sin archivo", "No file"));
             self_clr_diff.clear_diff_highlights();
-            imp.lbl_diff_count.set_label("0 diferencias encontradas");
-            imp.lbl_diff_removals.set_label("0 supresiones (-)");
-            imp.lbl_diff_additions.set_label("0 adiciones (+)");
+            imp.lbl_diff_count.set_label(tr!("Sin diferencias", "No differences"));
+            imp.lbl_diff_similarity.set_label(&format!("100% {}", tr!("similitud", "similarity")));
+            imp.lbl_diff_removals.set_label(&format!("0 {}", tr!("supresiones (-)", "deletions (-)")));
+            imp.lbl_diff_additions.set_label(&format!("0 {}", tr!("adiciones (+)", "additions (+)")));
             imp.lbl_footer_diff_badge.set_label("+0  -0");
             imp.hunk_positions.borrow_mut().clear();
+            imp.last_unified_diff.borrow_mut().clear();
         });
         self.add_action(&act_clr_diff);
 
@@ -1038,11 +1344,11 @@ impl VarDiffWindow {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
             if !text.is_empty() {
                 self_cpy.clipboard().set_text(&text);
-                imp.lbl_inspector_status.set_label("Copiado al portapapeles");
-                imp.btn_copy_inspector.set_tooltip_text(Some("Copiado"));
+                imp.lbl_inspector_status.set_label(tr!("Copiado al portapapeles", "Copied to clipboard"));
+                imp.btn_copy_inspector.set_tooltip_text(Some(tr!("Copiado", "Copied")));
                 let btn_clone = imp.btn_copy_inspector.clone();
                 glib::timeout_add_local_once(Duration::from_millis(1800), move || {
-                    btn_clone.set_tooltip_text(Some("Copiar al portapapeles"));
+                    btn_clone.set_tooltip_text(Some(tr!("Copiar", "Copy")));
                 });
             }
         });
@@ -1054,8 +1360,8 @@ impl VarDiffWindow {
         act_clr_ins.connect_activate(move |_, _| {
             let imp = self_clr_ins.imp();
             imp.source_inspector.buffer().set_text("");
-            imp.lbl_inspector_file.set_label("Sin archivo");
-            imp.lbl_inspector_status.set_label("Editor limpiado");
+            imp.lbl_inspector_file.set_label(tr!("Sin archivo", "No file"));
+            imp.lbl_inspector_status.set_label(tr!("Editor limpiado", "Editor cleared"));
         });
         self.add_action(&act_clr_ins);
 
@@ -1467,7 +1773,7 @@ impl VarDiffWindow {
         let total_lines = count_lines(&left_text) + count_lines(&right_text);
 
         if total_lines > ASYNC_LINE_THRESHOLD {
-            imp.lbl_diff_count.set_label("Calculando...");
+            imp.lbl_diff_count.set_label(tr!("Calculando...", "Calculating..."));
             let handles = glib::thread_guard::ThreadGuard::new(self.clone());
 
             thread::spawn(move || {
@@ -1518,7 +1824,27 @@ impl VarDiffWindow {
             }
         }
 
-        // 2. Inline word/token-level highlights
+        // 2. Inline word/token-level highlights & vertical accent stripes
+        let left_marks: Vec<crate::ui::diff_editor::DiffLineMark> = summary
+            .left_highlights
+            .iter()
+            .map(|h| crate::ui::diff_editor::DiffLineMark {
+                line: h.line_index as i32,
+                is_deletion: true,
+            })
+            .collect();
+        imp.source_diff_left.set_diff_line_marks(left_marks);
+
+        let right_marks: Vec<crate::ui::diff_editor::DiffLineMark> = summary
+            .right_highlights
+            .iter()
+            .map(|h| crate::ui::diff_editor::DiffLineMark {
+                line: h.line_index as i32,
+                is_deletion: false,
+            })
+            .collect();
+        imp.source_diff_right.set_diff_line_marks(right_marks);
+
         let left_diff_spans: Vec<crate::ui::diff_editor::DiffSpan> = summary
             .left_spans
             .iter()
@@ -1574,6 +1900,13 @@ impl VarDiffWindow {
         };
         imp.lbl_diff_count.set_label(&count_label);
 
+        let sim_pct = (summary.similarity_ratio * 100.0).round() as u32;
+        imp.lbl_diff_similarity.set_label(&format!(
+            "{}% {}",
+            sim_pct,
+            tr!("similitud", "similarity")
+        ));
+
         imp.lbl_diff_removals
             .set_label(&format!("{} {}", summary.deletions, tr!("supresiones (-)", "deletions (-)")));
         imp.lbl_diff_additions
@@ -1582,7 +1915,443 @@ impl VarDiffWindow {
             .set_label(&format!("+{}  -{}", summary.insertions, summary.deletions));
 
         imp.hunk_positions.replace(summary.hunk_positions);
+        imp.last_unified_diff.replace(summary.unified_diff);
         imp.current_hunk_idx.set(0);
+    }
+
+    fn handle_load_demo(&self) {
+        let imp = self.imp();
+        let active = imp.main_stack.visible_child_name().unwrap_or_default();
+
+        if active == "diff_page" {
+            let demo_left = r#"{
+  "service": "payment-gateway",
+  "version": "2.4.0",
+  "environment": "staging",
+  "booking": {
+    "confirmation_code": "J9MYX3",
+    "status": "pending",
+    "amount_usd": 149.50,
+    "retry_limit": 3
+  },
+  "features": [
+    "webhook_v1",
+    "fraud_check"
+  ]
+}"#;
+            let demo_right = r#"{
+  "service": "payment-gateway",
+  "version": "2.5.0",
+  "environment": "production",
+  "booking": {
+    "confirmation_code": "9R99XK",
+    "status": "confirmed",
+    "amount_usd": 185.00,
+    "retry_limit": 5,
+    "instant_settlement": true
+  },
+  "features": [
+    "webhook_v2",
+    "fraud_check",
+    "idempotency_guard"
+  ]
+}"#;
+            imp.source_diff_left.buffer().set_text(demo_left);
+            imp.source_diff_right.buffer().set_text(demo_right);
+            imp.lbl_left_file.set_label("staging-v2.4.json");
+            imp.lbl_right_file.set_label("production-v2.5.json");
+            self.handle_compute_diff();
+        } else {
+            let demo_inspector = if imp.btn_mode_xml.is_active() {
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<catalog environment="production">
+  <service id="srv-101" region="us-east-1">
+    <name>VarLens AST Engine</name>
+    <status>healthy</status>
+    <latency_ms>1.8</latency_ms>
+    <endpoints>
+      <endpoint method="POST" auth="oauth2">/v1/inspect</endpoint>
+      <endpoint method="POST" auth="oauth2">/v1/diff</endpoint>
+    </endpoints>
+  </service>
+</catalog>"#
+            } else if imp.btn_mode_vardump.is_active() {
+                r#"object(App\Domain\UserSession)#42 (4) {
+  ["user_id"]=>
+  int(90841)
+  ["username"]=>
+  string(12) "brayan_dev"
+  ["is_verified"]=>
+  bool(true)
+  ["permissions":protected]=>
+  array(3) {
+    [0]=>
+    string(10) "json:write"
+    [1]=>
+    string(9) "diff:read"
+    [2]=>
+    string(11) "system:root"
+  }
+}"#
+            } else if imp.btn_mode_raw.is_active() {
+                r#"Array
+(
+    [cluster] => eu-central-1
+    [nodes_online] => 8
+    [maintenance] => false
+    [replicas] => Array
+        (
+            [0] => node-alpha.internal
+            [1] => node-beta.internal
+        )
+)"#
+            } else {
+                r#"{
+  "application": "VarLens",
+  "release": "1.0.0",
+  "engine": {
+    "language": "Rust 2021",
+    "ui_toolkit": "GTK4 + Libadwaita",
+    "zero_cloud_telemetry": true,
+    "supported_formats": [
+      "RFC 8259 JSON",
+      "W3C XML",
+      "PHP var_dump()",
+      "PHP print_r() & var_export()"
+    ]
+  },
+  "metrics": {
+    "startup_ms": 14.2,
+    "fps_target": 60,
+    "documentation": "https://github.com/PinedaMB/VarLens"
+  }
+}"#
+            };
+            imp.source_inspector.buffer().set_text(demo_inspector);
+            imp.lbl_inspector_file.set_label("demo-sample");
+            imp.lbl_inspector_status.set_label(tr!(
+                "Datos de demostración cargados",
+                "Demo sample loaded"
+            ));
+        }
+    }
+
+    fn setup_code_search(&self) {
+        let imp = self.imp();
+        let Some(sbuf) = imp
+            .source_inspector
+            .buffer()
+            .downcast::<sourceview5::Buffer>()
+            .ok()
+        else {
+            return;
+        };
+
+        let settings = sourceview5::SearchSettings::new();
+        settings.set_case_sensitive(false);
+        settings.set_wrap_around(true);
+
+        let context = sourceview5::SearchContext::new(&sbuf, Some(&settings));
+        context.set_highlight(true);
+        imp.search_context.set(context.clone()).ok();
+
+        let view = imp.source_inspector.get();
+        let view_changed = view.clone();
+        let ctx_changed = context.clone();
+        let settings_changed = settings.clone();
+        imp.entry_search_inspector
+            .connect_search_changed(move |entry| {
+                let query = entry.text();
+                if query.is_empty() {
+                    settings_changed.set_search_text(None);
+                    return;
+                }
+                settings_changed.set_search_text(Some(query.as_str()));
+                let buf = view_changed.buffer();
+                let start = buf.start_iter();
+                if let Some((match_start, match_end, _)) = ctx_changed.forward(&start) {
+                    buf.select_range(&match_start, &match_end);
+                    let mut scroll_iter = match_start;
+                    view_changed.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
+                }
+            });
+
+        let view_act = view.clone();
+        let ctx_act = context.clone();
+        imp.entry_search_inspector.connect_activate(move |_| {
+            let buf = view_act.buffer();
+            let cursor = if let Some((_, sel_end)) = buf.selection_bounds() {
+                sel_end
+            } else {
+                buf.iter_at_offset(buf.cursor_position())
+            };
+            if let Some((match_start, match_end, _)) = ctx_act.forward(&cursor) {
+                buf.select_range(&match_start, &match_end);
+                let mut scroll_iter = match_start;
+                view_act.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
+            }
+        });
+
+        let view_next = view.clone();
+        let ctx_next = context.clone();
+        imp.entry_search_inspector.connect_next_match(move |_| {
+            let buf = view_next.buffer();
+            let cursor = if let Some((_, sel_end)) = buf.selection_bounds() {
+                sel_end
+            } else {
+                buf.iter_at_offset(buf.cursor_position())
+            };
+            if let Some((match_start, match_end, _)) = ctx_next.forward(&cursor) {
+                buf.select_range(&match_start, &match_end);
+                let mut scroll_iter = match_start;
+                view_next.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
+            }
+        });
+
+        let view_prev = view;
+        let ctx_prev = context;
+        imp.entry_search_inspector.connect_previous_match(move |_| {
+            let buf = view_prev.buffer();
+            let cursor = if let Some((sel_start, _)) = buf.selection_bounds() {
+                sel_start
+            } else {
+                buf.iter_at_offset(buf.cursor_position())
+            };
+            if let Some((match_start, match_end, _)) = ctx_prev.backward(&cursor) {
+                buf.select_range(&match_start, &match_end);
+                let mut scroll_iter = match_start;
+                view_prev.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
+            }
+        });
+    }
+
+    fn setup_drag_and_drop(&self) {
+        let imp = self.imp();
+
+        let attach_drop = |widget: &gtk4::Widget, win: Self, target: FileTarget| {
+            let drop_target =
+                gtk4::DropTarget::new(gio::File::static_type(), gdk::DragAction::COPY);
+            drop_target.connect_drop(move |_, value, _, _| {
+                if let Ok(file) = value.get::<gio::File>() {
+                    win.load_gio_file(&file, target);
+                    return true;
+                }
+                false
+            });
+            widget.add_controller(drop_target);
+        };
+
+        attach_drop(
+            imp.source_inspector.upcast_ref::<gtk4::Widget>(),
+            self.clone(),
+            FileTarget::Active,
+        );
+        attach_drop(
+            imp.source_diff_left.upcast_ref::<gtk4::Widget>(),
+            self.clone(),
+            FileTarget::DiffLeft,
+        );
+        attach_drop(
+            imp.source_diff_right.upcast_ref::<gtk4::Widget>(),
+            self.clone(),
+            FileTarget::DiffRight,
+        );
+    }
+
+    fn load_gio_file(&self, file: &gio::File, target: FileTarget) {
+        let filename = file
+            .basename()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| tr!("archivo", "file").to_string());
+
+        if let Ok((contents, _)) = file.load_contents(gio::Cancellable::NONE) {
+            if let Ok(text) = String::from_utf8(contents.to_vec()) {
+                let imp = self.imp();
+                match target {
+                    FileTarget::DiffLeft => {
+                        imp.source_diff_left.buffer().set_text(&text);
+                        imp.lbl_left_file.set_label(&filename);
+                        self.handle_compute_diff();
+                    }
+                    FileTarget::DiffRight => {
+                        imp.source_diff_right.buffer().set_text(&text);
+                        imp.lbl_right_file.set_label(&filename);
+                        self.handle_compute_diff();
+                    }
+                    FileTarget::Active => {
+                        let active = imp.main_stack.visible_child_name().unwrap_or_default();
+                        if active == "diff_page" {
+                            let left_buf = imp.source_diff_left.buffer();
+                            let right_buf = imp.source_diff_right.buffer();
+                            if left_buf.char_count() == 0 {
+                                left_buf.set_text(&text);
+                                imp.lbl_left_file.set_label(&filename);
+                            } else {
+                                right_buf.set_text(&text);
+                                imp.lbl_right_file.set_label(&filename);
+                                self.handle_compute_diff();
+                            }
+                        } else {
+                            if filename.ends_with(".xml") {
+                                Self::set_buffer_language(&imp.source_inspector.buffer(), "xml");
+                                imp.btn_mode_xml.set_active(true);
+                            }
+                            imp.source_inspector.buffer().set_text(&text);
+                            imp.lbl_inspector_file.set_label(&filename);
+                            imp.lbl_inspector_status.set_label(&format!(
+                                "{}: {} {}",
+                                tr!("Archivo cargado", "File loaded"),
+                                count_lines(&text),
+                                tr!("líneas", "lines")
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_save_file(&self) {
+        let imp = self.imp();
+        let active = imp.main_stack.visible_child_name().unwrap_or_default();
+        let (text, default_name) = if active == "diff_page" {
+            let right_buf = imp.source_diff_right.buffer();
+            let r_text = right_buf
+                .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
+                .to_string();
+            if !r_text.trim().is_empty() {
+                (r_text, "modified.json")
+            } else {
+                let left_buf = imp.source_diff_left.buffer();
+                (
+                    left_buf
+                        .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
+                        .to_string(),
+                    "original.json",
+                )
+            }
+        } else {
+            let buf = imp.source_inspector.buffer();
+            let ext = if imp.btn_mode_xml.is_active() {
+                "payload.xml"
+            } else {
+                "payload.json"
+            };
+            (
+                buf.text(&buf.start_iter(), &buf.end_iter(), true)
+                    .to_string(),
+                ext,
+            )
+        };
+
+        if text.trim().is_empty() {
+            imp.lbl_inspector_status
+                .set_label(tr!("El editor está vacío", "Editor is empty"));
+            return;
+        }
+
+        let file_dialog = gtk4::FileDialog::builder()
+            .title(tr!("Guardar archivo", "Save file"))
+            .initial_name(default_name)
+            .modal(true)
+            .build();
+
+        let self_clone = self.clone();
+        file_dialog.save(Some(self), gio::Cancellable::NONE, move |result| {
+            if let Ok(file) = result {
+                if let Some(path) = file.path() {
+                    if std::fs::write(&path, &text).is_ok() {
+                        let filename = file
+                            .basename()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let imp = self_clone.imp();
+                        imp.lbl_inspector_file.set_label(&filename);
+                        imp.lbl_inspector_status.set_label(&format!(
+                            "{}: {}",
+                            tr!("Guardado", "Saved"),
+                            filename
+                        ));
+                    }
+                }
+            }
+        });
+    }
+
+    fn normalize_single_payload(text: &str, indent: IndentStyle) -> Option<String> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Ok(sorted_json) = sort_json_keys(trimmed, indent) {
+            return Some(sorted_json);
+        }
+        if trimmed.starts_with('<') {
+            if let Ok(fmt_xml) = format_xml_with_indent(trimmed, true, indent) {
+                return Some(fmt_xml);
+            }
+        }
+        if let Ok(vd_json) = vardump_to_json_string(trimmed, true) {
+            if let Ok(sorted) = sort_json_keys(&vd_json, indent) {
+                return Some(sorted);
+            }
+            return Some(vd_json);
+        }
+        None
+    }
+
+    fn handle_normalize_diff(&self) {
+        let imp = self.imp();
+        let indent = self.current_indent_style();
+        let left_buf = imp.source_diff_left.buffer();
+        let right_buf = imp.source_diff_right.buffer();
+
+        let left_text = left_buf
+            .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
+            .to_string();
+        let right_text = right_buf
+            .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
+            .to_string();
+
+        if let Some(norm_l) = Self::normalize_single_payload(&left_text, indent) {
+            left_buf.set_text(&norm_l);
+        }
+        if let Some(norm_r) = Self::normalize_single_payload(&right_text, indent) {
+            right_buf.set_text(&norm_r);
+        }
+        self.handle_compute_diff();
+    }
+
+    fn handle_sort_json_keys(&self) {
+        let imp = self.imp();
+        let buf = imp.source_inspector.buffer();
+        let text = buf
+            .text(&buf.start_iter(), &buf.end_iter(), true)
+            .to_string();
+        if text.trim().is_empty() {
+            imp.lbl_inspector_status
+                .set_label(tr!("El editor está vacío", "Editor is empty"));
+            return;
+        }
+
+        let indent = self.current_indent_style();
+        match sort_json_keys(&text, indent) {
+            Ok(sorted) => {
+                buf.set_text(&sorted);
+                Self::set_buffer_language(&buf, "json");
+                imp.btn_mode_json.set_active(true);
+                imp.lbl_inspector_status.set_label(tr!(
+                    "Claves JSON ordenadas alfabéticamente (A→Z)",
+                    "JSON keys sorted alphabetically (A→Z)"
+                ));
+                imp.lbl_inspector_status.set_tooltip_text(None);
+            }
+            Err(err) => {
+                imp.lbl_inspector_status
+                    .set_label(&format!("Error: {}", err));
+                imp.lbl_inspector_status.set_tooltip_text(Some(&err));
+            }
+        }
     }
 
     fn handle_json_format(&self, pretty: bool) {
@@ -1595,23 +2364,32 @@ impl VarDiffWindow {
         let indent = self.current_indent_style();
 
         if text.trim().is_empty() {
-            imp.lbl_inspector_status.set_label("El editor está vacío");
+            imp.lbl_inspector_status
+                .set_label(tr!("El editor está vacío", "Editor is empty"));
             return;
         }
 
         let is_xml = imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<');
 
         let action_name = if is_xml {
-            if pretty { "Formateando XML" } else { "Minificando XML" }
+            if pretty {
+                tr!("Formateando XML", "Formatting XML")
+            } else {
+                tr!("Minificando XML", "Minifying XML")
+            }
         } else if pretty {
-            "Formateando JSON"
+            tr!("Formateando JSON", "Formatting JSON")
         } else {
-            "Minificando JSON"
+            tr!("Minificando JSON", "Minifying JSON")
         };
 
         if lines > ASYNC_LINE_THRESHOLD {
-            imp.lbl_inspector_status
-                .set_label(&format!("{} ({} líneas)...", action_name, lines));
+            imp.lbl_inspector_status.set_label(&format!(
+                "{} ({} {})...",
+                action_name,
+                lines,
+                tr!("líneas", "lines")
+            ));
             let handles = glib::thread_guard::ThreadGuard::new(self.clone());
 
             thread::spawn(move || {
@@ -1620,10 +2398,13 @@ impl VarDiffWindow {
                         Ok(formatted) => WorkerResult::InspectorFormatted {
                             text: formatted,
                             message: if pretty {
-                                "XML formateado correctamente".to_string()
+                                tr!("XML formateado correctamente", "XML formatted successfully")
+                                    .to_string()
                             } else {
-                                "XML minificado correctamente".to_string()
+                                tr!("XML minificado correctamente", "XML minified successfully")
+                                    .to_string()
                             },
+                            is_xml: true,
                         },
                         Err(e) => WorkerResult::Error(e),
                     }
@@ -1632,10 +2413,13 @@ impl VarDiffWindow {
                         Ok(formatted) => WorkerResult::InspectorFormatted {
                             text: formatted,
                             message: if pretty {
-                                "JSON formateado correctamente".to_string()
+                                tr!("JSON formateado correctamente", "JSON formatted successfully")
+                                    .to_string()
                             } else {
-                                "JSON minificado correctamente".to_string()
+                                tr!("JSON minificado correctamente", "JSON minified successfully")
+                                    .to_string()
                             },
+                            is_xml: false,
                         },
                         Err(e) => WorkerResult::Error(e),
                     }
@@ -1651,9 +2435,9 @@ impl VarDiffWindow {
                     Self::set_buffer_language(&buf, "xml");
                     imp.btn_mode_xml.set_active(true);
                     imp.lbl_inspector_status.set_label(if pretty {
-                        "XML formateado"
+                        tr!("XML formateado", "XML formatted")
                     } else {
-                        "XML minificado"
+                        tr!("XML minificado", "XML minified")
                     });
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
@@ -1669,9 +2453,9 @@ impl VarDiffWindow {
                     Self::set_buffer_language(&buf, "json");
                     imp.btn_mode_json.set_active(true);
                     imp.lbl_inspector_status.set_label(if pretty {
-                        "JSON formateado"
+                        tr!("JSON formateado", "JSON formatted")
                     } else {
-                        "JSON minificado"
+                        tr!("JSON minificado", "JSON minified")
                     });
                     imp.lbl_inspector_status.set_tooltip_text(None);
                 }
@@ -1740,6 +2524,7 @@ impl VarDiffWindow {
                     Ok(json_str) => WorkerResult::InspectorFormatted {
                         text: json_str,
                         message: format!("{} {}", mode_label, tr!("transformado exitosamente a JSON", "successfully converted to JSON")),
+                        is_xml: false,
                     },
                     Err(e) => WorkerResult::Error(e),
                 };
@@ -1769,11 +2554,20 @@ impl VarDiffWindow {
     fn handle_worker_result(&self, result: WorkerResult) {
         let imp = self.imp();
         match result {
-            WorkerResult::InspectorFormatted { text, message } => {
+            WorkerResult::InspectorFormatted {
+                text,
+                message,
+                is_xml,
+            } => {
                 let buf = imp.source_inspector.buffer();
                 buf.set_text(&text);
-                Self::set_buffer_language(&buf, "json");
-                imp.btn_mode_json.set_active(true);
+                if is_xml {
+                    Self::set_buffer_language(&buf, "xml");
+                    imp.btn_mode_xml.set_active(true);
+                } else {
+                    Self::set_buffer_language(&buf, "json");
+                    imp.btn_mode_json.set_active(true);
+                }
                 imp.lbl_inspector_status.set_label(&message);
                 imp.lbl_inspector_status.set_tooltip_text(None);
             }
@@ -1782,7 +2576,7 @@ impl VarDiffWindow {
             }
             WorkerResult::Error(err) => {
                 imp.lbl_inspector_status
-                    .set_label("Error: No es una estructura PHP var_dump válida");
+                    .set_label(&format!("Error: {}", err));
                 imp.lbl_inspector_status.set_tooltip_text(Some(&err));
             }
         }
@@ -1834,6 +2628,16 @@ impl VarDiffWindow {
             "<Control>O",
         ));
         grp_shortcuts.add(&make_shortcut_row(
+            tr!("Guardar archivo", "Save file"),
+            Some(tr!("Guarda el contenido del editor en disco", "Save editor content to disk")),
+            "<Control>S",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Buscar en código", "Search in code"),
+            Some(tr!("Enfoca la barra de búsqueda del editor", "Focus the editor search bar")),
+            "<Control>F",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
             tr!("Formatear documento", "Format document"),
             Some(tr!("Indentación automática de JSON o XML", "Automatic JSON or XML indentation")),
             "<Control><Shift>F",
@@ -1844,9 +2648,14 @@ impl VarDiffWindow {
             "<Control><Shift>M",
         ));
         grp_shortcuts.add(&make_shortcut_row(
-            tr!("Convertir PHP var_dump", "Convert PHP var_dump"),
-            Some(tr!("Transforma volcados de array u objeto a JSON", "Transform array or object dumps into JSON")),
-            "<Control><Shift>C",
+            tr!("Ordenar claves JSON", "Sort JSON keys"),
+            Some(tr!("Ordena recursivamente todas las claves (A→Z)", "Recursively sort all object keys (A→Z)")),
+            "<Control><Shift>S",
+        ));
+        grp_shortcuts.add(&make_shortcut_row(
+            tr!("Convertir PHP var_dump / XML", "Convert PHP var_dump / XML"),
+            Some(tr!("Transforma volcados de PHP o XML a JSON", "Transform PHP dumps or XML into JSON")),
+            "<Control><Shift>J",
         ));
         grp_shortcuts.add(&make_shortcut_row(
             tr!("Recalcular diferencias", "Recalculate diff"),
@@ -1861,7 +2670,7 @@ impl VarDiffWindow {
         grp_shortcuts.add(&make_shortcut_row(
             tr!("Limpiar paneles de comparación", "Clear diff panels"),
             None,
-            "<Control><Shift>D",
+            "<Control><Shift>C",
         ));
         grp_shortcuts.add(&make_shortcut_row(
             tr!("Ver atajos y ayuda", "Show shortcuts &amp; help"),

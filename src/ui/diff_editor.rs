@@ -15,12 +15,19 @@ pub struct DiffSpan {
     pub is_deletion: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DiffLineMark {
+    pub line: i32,
+    pub is_deletion: bool,
+}
+
 mod imp {
     use super::*;
 
     #[derive(Default)]
     pub struct VarLensDiffView {
         pub spans: RefCell<Vec<DiffSpan>>,
+        pub line_marks: RefCell<Vec<DiffLineMark>>,
     }
 
     #[glib::object_subclass]
@@ -37,8 +44,29 @@ mod imp {
             if layer == gtk4::TextViewLayer::BelowText {
                 let view = self.obj();
                 let spans = self.spans.borrow();
+                let marks = self.line_marks.borrow();
                 let buf = view.buffer();
                 let is_dark = libadwaita::StyleManager::default().is_dark();
+
+                // Draw vertical 3.5px accent stripe on the left edge of changed lines
+                for mark in marks.iter() {
+                    if let Some(iter) = buf.iter_at_line(mark.line) {
+                        let (y, h) = view.line_yrange(&iter);
+                        let bar_color = if mark.is_deletion {
+                            if is_dark {
+                                gdk::RGBA::new(0.95, 0.25, 0.30, 0.95)
+                            } else {
+                                gdk::RGBA::new(0.85, 0.15, 0.20, 0.90)
+                            }
+                        } else if is_dark {
+                            gdk::RGBA::new(0.15, 0.82, 0.50, 0.95)
+                        } else {
+                            gdk::RGBA::new(0.08, 0.65, 0.35, 0.90)
+                        };
+                        let rect = graphene::Rect::new(0.0, y as f32, 3.5, h.max(18) as f32);
+                        snapshot.append_color(&bar_color, &rect);
+                    }
+                }
 
                 for span in spans.iter() {
                     if let (Some(start_iter), Some(end_iter)) = (
@@ -129,9 +157,16 @@ impl VarLensDiffView {
         self.queue_draw();
     }
 
+    pub fn set_diff_line_marks(&self, marks: Vec<DiffLineMark>) {
+        let imp = self.imp();
+        *imp.line_marks.borrow_mut() = marks;
+        self.queue_draw();
+    }
+
     pub fn clear_diff_spans(&self) {
         let imp = self.imp();
         imp.spans.borrow_mut().clear();
+        imp.line_marks.borrow_mut().clear();
         self.queue_draw();
     }
 }

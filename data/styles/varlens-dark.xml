@@ -27,6 +27,7 @@
   <style name="current-line-number" foreground="text_normal" background="bg_line"/>
   <style name="line-numbers" foreground="text_dim" background="bg_dark"/>
   <style name="bracket-match" bold="true" background="#2b3b48"/>
+  <style name="search-match" foreground="#131719" background="#f8e45c" bold="true"/>
 
   <style name="def:comment" foreground="text_dim" italic="true"/>
   <style name="def:string" foreground="orange_str"/>

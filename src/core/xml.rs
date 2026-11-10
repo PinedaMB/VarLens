@@ -100,18 +100,16 @@ pub fn tokenize_xml(input: &str) -> Result<Vec<(XmlToken, usize, usize)>, String
                         let mut closed = false;
                         while let Some((_, c)) = chars.next() {
                             advance_pos(c, &mut line, &mut col);
-                            if c == '-' && input[start_idx..].contains("-->") {
-                                if chars.peek().map(|&(_, n)| n) == Some('-') {
+                            if c == '-' && chars.peek().map(|&(_, n)| n) == Some('-') {
+                                chars.next();
+                                advance_pos('-', &mut line, &mut col);
+                                if chars.peek().map(|&(_, n)| n) == Some('>') {
                                     chars.next();
-                                    advance_pos('-', &mut line, &mut col);
-                                    if chars.peek().map(|&(_, n)| n) == Some('>') {
-                                        chars.next();
-                                        advance_pos('>', &mut line, &mut col);
-                                        closed = true;
-                                        break;
-                                    }
-                                    comment.push('-');
+                                    advance_pos('>', &mut line, &mut col);
+                                    closed = true;
+                                    break;
                                 }
+                                comment.push('-');
                             }
                             comment.push(c);
                         }
@@ -686,6 +684,11 @@ pub fn xml_to_json_string(input: &str, pretty: bool) -> Result<String, String> {
                     } else {
                         root_elements.push(node);
                     }
+                } else {
+                    return Err(format!(
+                        "Etiqueta de cierre inesperada '</{}>' en línea {}, columna {} sin etiqueta de apertura",
+                        name, line, col
+                    ));
                 }
             }
             XmlToken::Text(t) => {
@@ -702,6 +705,13 @@ pub fn xml_to_json_string(input: &str, pretty: bool) -> Result<String, String> {
         }
     }
 
+    if let Some(unclosed) = stack.pop() {
+        return Err(format!(
+            "Etiqueta '<{}>' no fue cerrada (fin de archivo)",
+            unclosed.name
+        ));
+    }
+
     if root_elements.is_empty() {
         return Err("No se encontró ningún elemento raíz XML para convertir.".to_string());
     }
@@ -714,7 +724,20 @@ pub fn xml_to_json_string(input: &str, pretty: bool) -> Result<String, String> {
     } else {
         let mut map = serde_json::Map::new();
         for el in root_elements {
-            map.insert(el.name.clone(), el.to_json_value());
+            let val = el.to_json_value();
+            match map.entry(el.name) {
+                serde_json::map::Entry::Vacant(e) => {
+                    e.insert(val);
+                }
+                serde_json::map::Entry::Occupied(mut e) => {
+                    if let serde_json::Value::Array(ref mut arr) = e.get_mut() {
+                        arr.push(val);
+                    } else {
+                        let prev = e.get().clone();
+                        e.insert(serde_json::Value::Array(vec![prev, val]));
+                    }
+                }
+            }
         }
         serde_json::Value::Object(map)
     };
@@ -792,5 +815,11 @@ mod tests {
         assert!(json_str.contains("\"@id\":\"123\""));
         assert!(json_str.contains("\"name\":\"John\""));
         assert!(json_str.contains("\"age\":30"));
+    }
+
+    #[test]
+    fn test_xml_to_json_unclosed_fails() {
+        let xml = r#"<user id="123"><name>John</user>"#;
+        assert!(xml_to_json_string(xml, false).is_err());
     }
 }

@@ -54,21 +54,52 @@ impl FoldingController {
 
         let reg_lines = regions.clone();
         let fold_lines = folded_lines.clone();
+        let view_for_lines = view.downgrade();
         renderer_lines.connect_query_data(move |ren, _obj, line| {
             let line = line as usize;
-            let hidden = {
+            let (hidden, is_fold_header) = {
                 let folds = fold_lines.borrow();
                 let regs = reg_lines.borrow();
-                is_line_folded_away(line, &folds, &regs)
+                (
+                    is_line_folded_away(line, &folds, &regs),
+                    folds.contains(&line),
+                )
             };
 
             if hidden {
                 ren.set_text("");
             } else {
-                ren.set_markup(&format!(
-                    "<span font_desc='Fira Code, monospace 10.5pt' foreground='#75777e'>{}</span>",
-                    line + 1
-                ));
+                let is_cursor_line = view_for_lines
+                    .upgrade()
+                    .map(|v| {
+                        let buf = v.buffer();
+                        let iter = buf.iter_at_offset(buf.cursor_position());
+                        iter.line() as usize == line
+                    })
+                    .unwrap_or(false);
+
+                if is_fold_header {
+                    ren.set_markup(&format!(
+                        "<span font_desc='Fira Code, monospace 10.5pt' weight='bold' foreground='#3584e4'>{}</span>",
+                        line + 1
+                    ));
+                } else if is_cursor_line {
+                    let fg = if libadwaita::StyleManager::default().is_dark() {
+                        "#e6edf3"
+                    } else {
+                        "#1f2328"
+                    };
+                    ren.set_markup(&format!(
+                        "<span font_desc='Fira Code, monospace 10.5pt' weight='bold' foreground='{}'>{}</span>",
+                        fg,
+                        line + 1
+                    ));
+                } else {
+                    ren.set_markup(&format!(
+                        "<span font_desc='Fira Code, monospace 10.5pt' foreground='#75777e'>{}</span>",
+                        line + 1
+                    ));
+                }
             }
         });
 
@@ -92,9 +123,9 @@ impl FoldingController {
             if is_line_folded_away(line, &folds, &regs) {
                 ren.set_text("");
             } else if folds.contains(&line) {
-                ren.set_markup("<span size='small' foreground='#3584e4'>▶</span>");
+                ren.set_markup("<span size='small' weight='bold' foreground='#3584e4'>▶</span>");
             } else if regs.iter().any(|r| r.start_line == line) {
-                ren.set_markup("<span size='small' alpha='45%'>▼</span>");
+                ren.set_markup("<span size='small' alpha='55%'>▼</span>");
             } else {
                 ren.set_text("");
             }
@@ -119,14 +150,17 @@ impl FoldingController {
             }
         });
 
-        // Direct click gestures on the fold renderer, the line renderer, and gutter
-        Self::attach_click_gesture(&renderer_fold, &view, &regions, &folded_lines, &renderer_lines, &renderer_fold);
+        // Direct click gesture on the line numbers renderer so clicking line numbers also toggles fold
         Self::attach_click_gesture(&renderer_lines, &view, &regions, &folded_lines, &renderer_lines, &renderer_fold);
-        Self::attach_click_gesture(&gutter, &view, &regions, &folded_lines, &renderer_lines, &renderer_fold);
 
         // Insert into gutter: line numbers at -30 (left), fold arrows at -20 (right, beside code)
         gutter.insert(&renderer_lines, -30);
         gutter.insert(&renderer_fold, -20);
+
+        let ren_lines_cur = renderer_lines.clone();
+        view.buffer().connect_cursor_position_notify(move |_| {
+            ren_lines_cur.queue_draw();
+        });
 
         let controller = Self {
             view,
@@ -204,19 +238,40 @@ impl FoldingController {
                 t
             };
 
-            if let (Some(mut start_iter), Some(end_iter)) = (
+            let header_tag = if let Some(ht) = buf.tag_table().lookup("fold-header-highlight") {
+                ht
+            } else {
+                let ht = gtk4::TextTag::builder()
+                    .name("fold-header-highlight")
+                    .paragraph_background_rgba(&gtk4::gdk::RGBA::new(0.21, 0.52, 0.89, 0.12))
+                    .build();
+                buf.tag_table().add(&ht);
+                ht
+            };
+
+            if let (Some(mut start_iter), Some(mut end_iter)) = (
                 buf.iter_at_line(region.start_line as i32),
                 buf.iter_at_line(region.end_line as i32),
             ) {
-                // Keep the opening line/bracket visible, collapse lines inside the block
-                start_iter.forward_to_line_end();
+                let header_start = start_iter;
+                let mut header_end = start_iter;
+                if !header_end.ends_line() {
+                    header_end.forward_to_line_end();
+                }
 
-                if is_folded {
-                    buf.remove_tag(&tag, &start_iter, &end_iter);
-                    folded_lines.borrow_mut().remove(&line);
-                } else {
-                    buf.apply_tag(&tag, &start_iter, &end_iter);
-                    folded_lines.borrow_mut().insert(line);
+                // Keep the opening line visible, collapse the inner lines (including the newline
+                // right before the closing line so the closing bracket stays on its own line
+                // without merging lines and invalidating Pango/GtkTextBTree byte offsets).
+                if start_iter.forward_line() && end_iter.backward_char() && start_iter < end_iter {
+                    if is_folded {
+                        buf.remove_tag(&tag, &start_iter, &end_iter);
+                        buf.remove_tag(&header_tag, &header_start, &header_end);
+                        folded_lines.borrow_mut().remove(&line);
+                    } else {
+                        buf.apply_tag(&tag, &start_iter, &end_iter);
+                        buf.apply_tag(&header_tag, &header_start, &header_end);
+                        folded_lines.borrow_mut().insert(line);
+                    }
                 }
             }
             true
@@ -235,23 +290,26 @@ impl FoldingController {
         // Clear any old folds that no longer match
         let mut folded = self.folded_lines.borrow_mut();
         folded.retain(|&line| {
+            let tag_name = format!("fold-line-{}", line);
+            if let Some(tag) = buf.tag_table().lookup(&tag_name) {
+                buf.remove_tag(&tag, &buf.start_iter(), &buf.end_iter());
+            }
             if let Some(reg) = new_regions.iter().find(|r| r.start_line == line) {
-                let tag_name = format!("fold-line-{}", line);
                 if let Some(tag) = buf.tag_table().lookup(&tag_name) {
-                    if let (Some(mut start_iter), Some(end_iter)) = (
+                    if let (Some(mut start_iter), Some(mut end_iter)) = (
                         buf.iter_at_line(reg.start_line as i32),
                         buf.iter_at_line(reg.end_line as i32),
                     ) {
-                        start_iter.forward_to_line_end();
-                        buf.apply_tag(&tag, &start_iter, &end_iter);
+                        if start_iter.forward_line()
+                            && end_iter.backward_char()
+                            && start_iter < end_iter
+                        {
+                            buf.apply_tag(&tag, &start_iter, &end_iter);
+                        }
                     }
                 }
                 true
             } else {
-                let tag_name = format!("fold-line-{}", line);
-                if let Some(tag) = buf.tag_table().lookup(&tag_name) {
-                    buf.remove_tag(&tag, &buf.start_iter(), &buf.end_iter());
-                }
                 false
             }
         });
@@ -259,5 +317,11 @@ impl FoldingController {
         *self.regions.borrow_mut() = new_regions;
         self.renderer_lines.queue_draw();
         self.renderer_fold.queue_draw();
+    }
+
+    /// Shows or hides the custom line number gutter column.
+    pub fn set_line_numbers_visible(&self, visible: bool) {
+        self.renderer_lines.set_visible(visible);
+        self.renderer_lines.queue_draw();
     }
 }

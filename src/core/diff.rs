@@ -302,6 +302,7 @@ fn merge_adjacent_spans(spans: &mut Vec<SpanHighlight>, text: &str) {
 }
 
 /// Computes the diff between two text inputs using default whitespace sensitivity.
+#[allow(dead_code)]
 pub fn compute_diff(old_text: &str, new_text: &str, patience: bool) -> DiffSummary {
     compute_diff_ext(old_text, new_text, patience, false)
 }

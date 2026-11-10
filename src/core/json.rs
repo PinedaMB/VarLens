@@ -20,11 +20,56 @@ impl IndentStyle {
 
     pub fn label(&self) -> &'static str {
         match self {
-            IndentStyle::Spaces2 => "2 Espacios",
-            IndentStyle::Spaces4 => "4 Espacios",
-            IndentStyle::Tabs => "Tabuladores",
+            IndentStyle::Spaces2 => crate::tr!("2 Espacios", "2 Spaces"),
+            IndentStyle::Spaces4 => crate::tr!("4 Espacios", "4 Spaces"),
+            IndentStyle::Tabs => crate::tr!("Tabuladores", "Tabs"),
         }
     }
+}
+
+/// Formats a JSON string sorting all object keys alphabetically (recursively).
+pub fn sort_json_keys(input: &str, indent: IndentStyle) -> Result<String, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(crate::tr!("El contenido está vacío.", "Content is empty.").to_string());
+    }
+
+    let parsed: Value = serde_json::from_str(trimmed).map_err(|err| {
+        format!(
+            "{} {}, {} {}: {}",
+            crate::tr!("Error de sintaxis JSON en línea", "JSON syntax error at line"),
+            err.line(),
+            crate::tr!("columna", "column"),
+            err.column(),
+            err
+        )
+    })?;
+
+    fn sort_value(val: Value) -> Value {
+        match val {
+            Value::Object(map) => {
+                let mut entries: Vec<(String, Value)> =
+                    map.into_iter().map(|(k, v)| (k, sort_value(v))).collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut sorted_map = serde_json::Map::new();
+                for (k, v) in entries {
+                    sorted_map.insert(k, v);
+                }
+                Value::Object(sorted_map)
+            }
+            Value::Array(arr) => Value::Array(arr.into_iter().map(sort_value).collect()),
+            other => other,
+        }
+    }
+
+    let sorted = sort_value(parsed);
+    let mut buf = Vec::new();
+    let formatter = PrettyFormatter::with_indent(indent.as_bytes());
+    let mut ser = Serializer::with_formatter(&mut buf, formatter);
+    sorted
+        .serialize(&mut ser)
+        .map_err(|err| format!("{}: {}", crate::tr!("Error al serializar JSON", "Error serializing JSON"), err))?;
+    String::from_utf8(buf).map_err(|err| format!("UTF-8 error: {}", err))
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -193,5 +238,13 @@ mod tests {
         let m = analyze_json(raw).unwrap();
         assert_eq!(m.total_keys, 4);
         assert_eq!(m.max_depth, 2);
+    }
+
+    #[test]
+    fn test_sort_json_keys() {
+        let raw = r#"{"z": 1, "a": {"d": 4, "c": 3}, "b": [{"y": 2, "x": 1}]}"#;
+        let sorted = sort_json_keys(raw, IndentStyle::Spaces2).unwrap();
+        let expected = "{\n  \"a\": {\n    \"c\": 3,\n    \"d\": 4\n  },\n  \"b\": [\n    {\n      \"x\": 1,\n      \"y\": 2\n    }\n  ],\n  \"z\": 1\n}";
+        assert_eq!(sorted, expected);
     }
 }

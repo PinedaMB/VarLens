@@ -55,6 +55,13 @@
                   </object>
                 </child>
                 <child>
+                  <object class="GtkButton" id="btn_save">
+                    <property name="icon-name">document-save-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Guardar archivo (Ctrl+S)</property>
+                    <property name="action-name">win.save-file</property>
+                  </object>
+                </child>
+                <child>
                   <object class="GtkSeparator">
                     <property name="orientation">vertical</property>
                   </object>
@@ -80,10 +87,37 @@
 
             <!-- Acciones a la derecha -->
             <child type="end">
-              <object class="GtkMenuButton">
-                <property name="icon-name">open-menu-symbolic</property>
-                <property name="menu-model">primary_menu</property>
-                <property name="tooltip-text" translatable="yes">Menú principal</property>
+              <object class="GtkBox">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkButton" id="btn_load_demo">
+                    <property name="icon-name">media-playback-start-symbolic</property>
+                    <property name="label" translatable="yes">Demo</property>
+                    <property name="tooltip-text" translatable="yes">Cargar datos de demostración en la vista actual</property>
+                    <property name="action-name">win.load-demo</property>
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btn_theme_toggle">
+                    <property name="icon-name">weather-clear-night-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Alternar tema Claro / Oscuro</property>
+                    <property name="action-name">win.toggle-theme</property>
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="btn_primary_menu">
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="menu-model">primary_menu</property>
+                    <property name="tooltip-text" translatable="yes">Menú principal</property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>
@@ -158,6 +192,16 @@
                               </object>
                             </child>
 
+                            <!-- Badge Similitud -->
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_similarity">
+                                <property name="label">100% similar</property>
+                                <style>
+                                  <class name="badge-accent"/>
+                                </style>
+                              </object>
+                            </child>
+
                             <child>
                               <object class="GtkSeparator">
                                 <property name="orientation">vertical</property>
@@ -174,6 +218,37 @@
                                 <style>
                                   <class name="suggested-action"/>
                                 </style>
+                              </object>
+                            </child>
+
+                            <!-- Acciones rápidas de Diff: Intercambiar, Normalizar, Copiar Patch -->
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <style>
+                                  <class name="linked"/>
+                                </style>
+                                <child>
+                                  <object class="GtkButton" id="btn_swap_diff">
+                                    <property name="icon-name">object-flip-horizontal-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Intercambiar paneles Izquierdo ↔ Derecho</property>
+                                    <property name="action-name">win.swap-diff</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="btn_normalize_diff">
+                                    <property name="icon-name">format-indent-more-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Formatear y normalizar ambos paneles antes de comparar</property>
+                                    <property name="action-name">win.normalize-diff</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="btn_copy_patch">
+                                    <property name="icon-name">edit-copy-symbolic</property>
+                                    <property name="tooltip-text" translatable="yes">Copiar Unified Diff (.patch) al portapapeles</property>
+                                    <property name="action-name">win.copy-unified-diff</property>
+                                  </object>
+                                </child>
                               </object>
                             </child>
 
@@ -250,6 +325,7 @@
                                     <property name="spacing">8</property>
                                     <style>
                                       <class name="panel-header"/>
+                                      <class name="panel-header-left"/>
                                     </style>
                                     <child>
                                       <object class="GtkLabel" id="lbl_title_original">
@@ -339,6 +415,7 @@
                                     <property name="spacing">8</property>
                                     <style>
                                       <class name="panel-header"/>
+                                      <class name="panel-header-right"/>
                                     </style>
                                     <child>
                                       <object class="GtkLabel" id="lbl_title_modified">
@@ -461,7 +538,7 @@
                               </object>
                             </child>
                             <child>
-                              <object class="GtkLabel">
+                              <object class="GtkLabel" id="lbl_diff_encoding">
                                 <property name="label">UTF-8  •  JSON  •  Espacios: 2</property>
                                 <style>
                                   <class name="caption"/>
@@ -533,6 +610,14 @@
                             </child>
 
                             <child>
+                              <object class="GtkButton" id="btn_sort_keys">
+                                <property name="icon-name">view-sort-ascending-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Ordenar claves JSON alfabéticamente (A→Z)</property>
+                                <property name="action-name">win.sort-json-keys</property>
+                              </object>
+                            </child>
+
+                            <child>
                               <object class="GtkSeparator">
                                 <property name="orientation">vertical</property>
                               </object>
@@ -584,6 +669,13 @@
                                 <property name="spacing">8</property>
                                 <property name="hexpand">true</property>
                                 <property name="halign">end</property>
+
+                                <child>
+                                  <object class="GtkSearchEntry" id="entry_search_inspector">
+                                    <property name="placeholder-text" translatable="yes">Buscar en código (Ctrl+F)...</property>
+                                    <property name="width-request">190</property>
+                                  </object>
+                                </child>
 
                                 <child>
                                   <object class="GtkDropDown" id="dd_indent">

@@ -30,6 +30,7 @@
   <style name="current-line-number" foreground="text_normal" background="bg_line"/>
   <style name="line-numbers" foreground="text_dim" background="bg_light"/>
   <style name="bracket-match" bold="true" background="#ddf4ff"/>
+  <style name="search-match" foreground="#1f2328" background="#ffdf5d" bold="true"/>
 
   <!-- Common / Base Syntax -->
   <style name="def:comment" foreground="text_dim" italic="true"/>

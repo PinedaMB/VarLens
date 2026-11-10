@@ -279,10 +279,155 @@ fn pair_to_value(pair: Pair<Rule>) -> Result<Value, String> {
             Ok(Value::Object(map))
         }
         Rule::printr_scalar => Ok(parse_printr_scalar(pair.as_str())),
+        Rule::varexport_array => {
+            let mut entries: Vec<(Option<i64>, String, Value)> = Vec::new();
+            let mut auto_idx: i64 = 0;
+
+            for item in pair.into_inner() {
+                if item.as_rule() == Rule::varexport_entries {
+                    for entry in item.into_inner() {
+                        if entry.as_rule() == Rule::varexport_entry {
+                            let mut inner = entry.into_inner();
+                            let first = inner
+                                .next()
+                                .ok_or_else(|| "Entrada de array vacía".to_string())?;
+                            if first.as_rule() == Rule::varexport_key {
+                                let val_pair = inner
+                                    .next()
+                                    .ok_or_else(|| "Entrada de array sin valor".to_string())?;
+                                let (num_opt, key_str) = parse_varexport_key(first);
+                                if let Some(n) = num_opt {
+                                    if n >= auto_idx {
+                                        auto_idx = n + 1;
+                                    }
+                                }
+                                let val = pair_to_value(val_pair)?;
+                                entries.push((num_opt, key_str, val));
+                            } else {
+                                let idx = auto_idx;
+                                auto_idx += 1;
+                                let val = pair_to_value(first)?;
+                                entries.push((Some(idx), idx.to_string(), val));
+                            }
+                        }
+                    }
+                }
+            }
+
+            let is_sequential = !entries.is_empty()
+                && entries
+                    .iter()
+                    .enumerate()
+                    .all(|(idx, (num_opt, _, _))| *num_opt == Some(idx as i64));
+
+            if entries.is_empty() || is_sequential {
+                let vec: Vec<Value> = entries.into_iter().map(|(_, _, v)| v).collect();
+                Ok(Value::Array(vec))
+            } else {
+                let mut map = Map::new();
+                for (_, k, v) in entries {
+                    map.insert(k, v);
+                }
+                Ok(Value::Object(map))
+            }
+        }
+        Rule::varexport_object => {
+            for item in pair.into_inner() {
+                if item.as_rule() == Rule::varexport_array {
+                    let val = pair_to_value(item)?;
+                    return match val {
+                        Value::Object(_) => Ok(val),
+                        Value::Array(arr) if arr.is_empty() => Ok(Value::Object(Map::new())),
+                        other => Ok(other),
+                    };
+                }
+            }
+            Ok(Value::Object(Map::new()))
+        }
+        Rule::varexport_val => {
+            let inner = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| "Valor var_export vacío".to_string())?;
+            match inner.as_rule() {
+                Rule::null_lit => Ok(Value::Null),
+                Rule::bool_lit => Ok(Value::Bool(inner.as_str().eq_ignore_ascii_case("true"))),
+                Rule::int_lit => {
+                    let n: i64 = inner
+                        .as_str()
+                        .parse()
+                        .map_err(|e| format!("Entero inválido: {}", e))?;
+                    Ok(Value::Number(n.into()))
+                }
+                Rule::float_raw => {
+                    let f: f64 = inner
+                        .as_str()
+                        .parse()
+                        .map_err(|e| format!("Flotante inválido: {}", e))?;
+                    Ok(Number::from_f64(f).map(Value::Number).unwrap_or(Value::Null))
+                }
+                Rule::sq_string => {
+                    let s = inner
+                        .into_inner()
+                        .next()
+                        .map(|p| p.as_str())
+                        .unwrap_or("");
+                    Ok(Value::String(
+                        s.replace("\\'", "'").replace("\\\\", "\\"),
+                    ))
+                }
+                Rule::quoted_string => {
+                    let s = inner
+                        .into_inner()
+                        .next()
+                        .map(|p| p.as_str())
+                        .unwrap_or("");
+                    Ok(Value::String(unescape_php_string(s)))
+                }
+                Rule::identifier => Ok(Value::String(inner.as_str().to_string())),
+                _ => pair_to_value(inner),
+            }
+        }
         Rule::resource_val => Ok(Value::String(pair.as_str().to_string())),
         Rule::recursion_val => Ok(Value::String("*RECURSION*".to_string())),
         Rule::uninitialized_val => Ok(Value::Null),
         other => Err(format!("Regla inesperada de var_dump: {:?}", other)),
+    }
+}
+
+fn parse_varexport_key(pair: Pair<Rule>) -> (Option<i64>, String) {
+    if let Some(inner) = pair.into_inner().next() {
+        match inner.as_rule() {
+            Rule::int_lit => {
+                let s = inner.as_str();
+                (s.parse::<i64>().ok(), s.to_string())
+            }
+            Rule::sq_string => {
+                let s = inner
+                    .into_inner()
+                    .next()
+                    .map(|p| p.as_str())
+                    .unwrap_or("");
+                let unescaped = s.replace("\\'", "'").replace("\\\\", "\\");
+                (unescaped.parse::<i64>().ok(), unescaped)
+            }
+            Rule::quoted_key => {
+                let s = inner
+                    .into_inner()
+                    .next()
+                    .map(|p| p.as_str())
+                    .unwrap_or("");
+                let unescaped = unescape_php_string(s);
+                (unescaped.parse::<i64>().ok(), unescaped)
+            }
+            Rule::identifier => {
+                let s = inner.as_str().to_string();
+                (s.parse::<i64>().ok(), s)
+            }
+            _ => (None, inner.as_str().to_string()),
+        }
+    } else {
+        (None, String::new())
     }
 }
 
@@ -313,7 +458,13 @@ pub fn is_printr_raw(input: &str) -> bool {
         if let Some(root_pair) = pairs.next() {
             if let Some(value_pair) = root_pair.into_inner().find(|p| p.as_rule() == Rule::value) {
                 if let Some(inner) = value_pair.into_inner().find(|p| p.as_rule() != Rule::reference) {
-                    return inner.as_rule() == Rule::printr_array || inner.as_rule() == Rule::printr_object;
+                    return matches!(
+                        inner.as_rule(),
+                        Rule::printr_array
+                            | Rule::printr_object
+                            | Rule::varexport_array
+                            | Rule::varexport_object
+                    );
                 }
             }
         }
@@ -460,5 +611,38 @@ Array
             }
         "#;
         assert!(!is_printr_raw(vardump_input));
+    }
+
+    #[test]
+    fn test_varexport_array_raw() {
+        let input_traditional = r#"
+            array (
+                'service' => 'varlens-core',
+                'version' => 2,
+                'features' => array (
+                    0 => 'diff',
+                    1 => 'tree',
+                ),
+            )
+        "#;
+        assert!(is_printr_raw(input_traditional));
+        let val = parse_vardump(input_traditional).unwrap();
+        assert_eq!(val["service"], "varlens-core");
+        assert_eq!(val["version"], 2);
+        assert_eq!(val["features"][0], "diff");
+        assert_eq!(val["features"][1], "tree");
+
+        let input_short = r#"
+            [
+                "host" => "localhost",
+                "port" => 8080,
+                "debug" => true,
+            ]
+        "#;
+        assert!(is_printr_raw(input_short));
+        let val_short = parse_vardump(input_short).unwrap();
+        assert_eq!(val_short["host"], "localhost");
+        assert_eq!(val_short["port"], 8080);
+        assert_eq!(val_short["debug"], true);
     }
 }

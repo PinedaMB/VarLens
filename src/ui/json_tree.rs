@@ -27,6 +27,7 @@ mod imp_node {
         pub path: RefCell<String>,
         pub access_path: RefCell<String>,
         pub raw_value: RefCell<String>,
+        pub json_value: RefCell<String>,
         pub children: RefCell<Option<gio::ListStore>>,
     }
 
@@ -44,6 +45,28 @@ glib::wrapper! {
     pub struct JsonNodeObject(ObjectSubclass<imp_node::JsonNodeObject>);
 }
 
+fn is_simple_identifier(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+fn format_child_access_path(parent: &str, key: &str) -> String {
+    if is_simple_identifier(key) {
+        if parent.is_empty() {
+            key.to_string()
+        } else {
+            format!("{}.{}", parent, key)
+        }
+    } else {
+        let escaped = key.replace('\\', "\\\\").replace('"', "\\\"");
+        format!("{}[\"{}\"]", parent, escaped)
+    }
+}
+
 impl JsonNodeObject {
     pub fn new(key: &str, value: &serde_json::Value, path: &str, access_path: &str) -> Self {
         let obj: Self = glib::Object::new();
@@ -57,6 +80,8 @@ impl JsonNodeObject {
             serde_json::Value::Object(map) => {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::Object(map.len()));
                 *imp.raw_value.borrow_mut() = format!("{} keys", map.len());
+                *imp.json_value.borrow_mut() =
+                    serde_json::to_string_pretty(value).unwrap_or_default();
                 let store = gio::ListStore::new::<JsonNodeObject>();
                 for (k, v) in map {
                     let child_path = if path.is_empty() {
@@ -64,11 +89,7 @@ impl JsonNodeObject {
                     } else {
                         format!("{} ▶ {}", path, k)
                     };
-                    let child_access = if access_path.is_empty() {
-                        k.clone()
-                    } else {
-                        format!("{}.{}", access_path, k)
-                    };
+                    let child_access = format_child_access_path(access_path, k);
                     let child = JsonNodeObject::new(k, v, &child_path, &child_access);
                     store.append(&child);
                 }
@@ -77,6 +98,8 @@ impl JsonNodeObject {
             serde_json::Value::Array(arr) => {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::Array(arr.len()));
                 *imp.raw_value.borrow_mut() = format!("{} items", arr.len());
+                *imp.json_value.borrow_mut() =
+                    serde_json::to_string_pretty(value).unwrap_or_default();
                 let store = gio::ListStore::new::<JsonNodeObject>();
                 for (i, v) in arr.iter().enumerate() {
                     let child_path = if path.is_empty() {
@@ -93,19 +116,24 @@ impl JsonNodeObject {
             serde_json::Value::String(s) => {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::String(s.clone()));
                 *imp.raw_value.borrow_mut() = s.clone();
+                *imp.json_value.borrow_mut() = s.clone();
             }
             serde_json::Value::Number(n) => {
                 let s = n.to_string();
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::Number(s.clone()));
-                *imp.raw_value.borrow_mut() = s;
+                *imp.raw_value.borrow_mut() = s.clone();
+                *imp.json_value.borrow_mut() = s;
             }
             serde_json::Value::Bool(b) => {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::Boolean(*b));
-                *imp.raw_value.borrow_mut() = b.to_string();
+                let s = b.to_string();
+                *imp.raw_value.borrow_mut() = s.clone();
+                *imp.json_value.borrow_mut() = s;
             }
             serde_json::Value::Null => {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::Null);
                 *imp.raw_value.borrow_mut() = "null".to_string();
+                *imp.json_value.borrow_mut() = "null".to_string();
             }
         }
 
@@ -128,6 +156,10 @@ impl JsonNodeObject {
         self.imp().raw_value.borrow().clone()
     }
 
+    pub fn json_value(&self) -> String {
+        self.imp().json_value.borrow().clone()
+    }
+
     pub fn children(&self) -> Option<gio::ListStore> {
         self.imp().children.borrow().clone()
     }
@@ -137,56 +169,70 @@ impl JsonNodeObject {
         let key = imp.key.borrow();
         let key_escaped = glib::markup_escape_text(&key);
 
-        let (key_col, str_col, num_col, bool_col, dim_col) = if is_dark {
-            ("#5eead4", "#fed7aa", "#ff7b72", "#34d399", "#8b949e")
+        let (key_col, str_col, num_col, bool_col, dim_col, badge_bg) = if is_dark {
+            (
+                "#5eead4",
+                "#fed7aa",
+                "#ff7b72",
+                "#34d399",
+                "#8b949e",
+                "#21262d",
+            )
         } else {
-            ("#0550ae", "#0a3069", "#cf222e", "#1a7f37", "#6e7781")
+            (
+                "#0550ae",
+                "#0a3069",
+                "#cf222e",
+                "#1a7f37",
+                "#6e7781",
+                "#eaeef2",
+            )
         };
 
         match imp.node_type.borrow().as_ref() {
             Some(JsonNodeType::Object(count)) => {
                 format!(
-                    "<b><span foreground='{}'>{}</span></b> <span foreground='{}'>{{{}}}</span>",
-                    key_col, key_escaped, dim_col, count
+                    "<span background='{}' foreground='{}' size='small' weight='bold'> {{}} </span> <b><span foreground='{}'>{}</span></b> <span foreground='{}' size='small'>({} keys)</span>",
+                    badge_bg, key_col, key_col, key_escaped, dim_col, count
                 )
             }
             Some(JsonNodeType::Array(count)) => {
                 format!(
-                    "<b><span foreground='{}'>{}</span></b> <span foreground='{}'>[{}]</span>",
-                    key_col, key_escaped, dim_col, count
+                    "<span background='{}' foreground='{}' size='small' weight='bold'> [] </span> <b><span foreground='{}'>{}</span></b> <span foreground='{}' size='small'>[{} items]</span>",
+                    badge_bg, bool_col, key_col, key_escaped, dim_col, count
                 )
             }
             Some(JsonNodeType::String(s)) => {
                 let val_escaped = glib::markup_escape_text(s);
                 if s.starts_with("http://") || s.starts_with("https://") {
                     format!(
-                        "<b><span foreground='{}'>{}</span></b> <span foreground='{}'> : </span><span foreground='#3584e4' underline='single'>{}</span>",
-                        key_col, key_escaped, dim_col, val_escaped
+                        "<span background='{}' foreground='#3584e4' size='x-small' weight='bold'> URL </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><span foreground='#3584e4' underline='single'>\"{}\"</span>",
+                        badge_bg, key_col, key_escaped, dim_col, val_escaped
                     )
                 } else {
                     format!(
-                        "<b><span foreground='{}'>{}</span></b> <span foreground='{}'> : </span><span foreground='{}'>{}</span>",
-                        key_col, key_escaped, dim_col, str_col, val_escaped
+                        "<span background='{}' foreground='{}' size='x-small' weight='bold'> STR </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><span foreground='{}'>\"{}\"</span>",
+                        badge_bg, str_col, key_col, key_escaped, dim_col, str_col, val_escaped
                     )
                 }
             }
             Some(JsonNodeType::Number(n)) => {
                 let val_escaped = glib::markup_escape_text(n);
                 format!(
-                    "<b><span foreground='{}'>{}</span></b> <span foreground='{}'> : </span><span foreground='{}'>{}</span>",
-                    key_col, key_escaped, dim_col, num_col, val_escaped
+                    "<span background='{}' foreground='{}' size='x-small' weight='bold'> NUM </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><b><span foreground='{}'>{}</span></b>",
+                    badge_bg, num_col, key_col, key_escaped, dim_col, num_col, val_escaped
                 )
             }
             Some(JsonNodeType::Boolean(b)) => {
                 format!(
-                    "<b><span foreground='{}'>{}</span></b> <span foreground='{}'> : </span><b><span foreground='{}'>{}</span></b>",
-                    key_col, key_escaped, dim_col, bool_col, b
+                    "<span background='{}' foreground='{}' size='x-small' weight='bold'> BOOL </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><b><span foreground='{}'>{}</span></b>",
+                    badge_bg, bool_col, key_col, key_escaped, dim_col, bool_col, b
                 )
             }
             Some(JsonNodeType::Null) => {
                 format!(
-                    "<b><span foreground='{}'>{}</span></b> <span foreground='{}'> : </span><i><span foreground='{}'>null</span></i>",
-                    key_col, key_escaped, dim_col, dim_col
+                    "<span background='{}' foreground='{}' size='x-small' weight='bold'> NULL </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><i><span foreground='{}'>null</span></i>",
+                    badge_bg, dim_col, key_col, key_escaped, dim_col, dim_col
                 )
             }
             None => key_escaped.to_string(),
@@ -211,9 +257,11 @@ pub struct JsonTreeView {
     btn_expand_all: gtk4::Button,
     btn_collapse_all: gtk4::Button,
     btn_copy_path: gtk4::Button,
+    btn_copy_value: gtk4::Button,
     btn_prev_match: gtk4::Button,
     btn_next_match: gtk4::Button,
     current_access_path: Rc<RefCell<String>>,
+    current_node_value: Rc<RefCell<String>>,
     search_matches: Rc<RefCell<Vec<u32>>>,
     current_match_idx: Rc<RefCell<usize>>,
 }
@@ -248,6 +296,11 @@ impl JsonTreeView {
         let btn_copy_path = gtk4::Button::builder()
             .icon_name("edit-copy-symbolic")
             .tooltip_text(tr!("Copiar ruta de acceso (ej. array[0].HotelCode)", "Copy access path (e.g. array[0].HotelCode)"))
+            .build();
+
+        let btn_copy_value = gtk4::Button::builder()
+            .icon_name("document-edit-symbolic")
+            .tooltip_text(tr!("Copiar valor o sub-JSON del nodo", "Copy node value or sub-JSON"))
             .build();
 
         let sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
@@ -286,6 +339,7 @@ impl JsonTreeView {
         toolbar.append(&btn_expand_all);
         toolbar.append(&btn_collapse_all);
         toolbar.append(&btn_copy_path);
+        toolbar.append(&btn_copy_value);
         toolbar.append(&sep);
         toolbar.append(&search_box);
 
@@ -405,19 +459,23 @@ impl JsonTreeView {
         container.append(&scrolled);
 
         let current_access_path = Rc::new(RefCell::new(String::new()));
+        let current_node_value = Rc::new(RefCell::new(String::new()));
         let search_matches = Rc::new(RefCell::new(Vec::new()));
         let current_match_idx = Rc::new(RefCell::new(0));
 
         // Connect node selection to update breadcrumb
         let breadcrumb_clone = lbl_breadcrumb.clone();
         let access_clone = current_access_path.clone();
+        let val_clone = current_node_value.clone();
         selection_model.connect_selected_item_notify(move |sel| {
             if let Some(tree_row) = sel.selected_item().and_downcast::<gtk4::TreeListRow>() {
                 if let Some(node) = tree_row.item().and_downcast::<JsonNodeObject>() {
                     let p = node.path();
                     let a = node.access_path();
+                    let v = node.json_value();
                     breadcrumb_clone.set_text(&p);
                     *access_clone.borrow_mut() = a;
+                    *val_clone.borrow_mut() = v;
                 }
             }
         });
@@ -432,8 +490,26 @@ impl JsonTreeView {
                     display.clipboard().set_text(&path);
                 }
                 let old_text = breadcrumb_for_copy.text().to_string();
-                breadcrumb_for_copy.set_text(&format!("{}: {}", tr!("✓ Copiado", "✓ Copied"), path));
+                breadcrumb_for_copy.set_text(&format!("{}: {}", tr!("✓ Ruta copiada", "✓ Path copied"), path));
                 let lbl = breadcrumb_for_copy.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
+                    lbl.set_text(&old_text);
+                });
+            }
+        });
+
+        // Copy node value button
+        let val_for_copy = current_node_value.clone();
+        let breadcrumb_for_val = lbl_breadcrumb.clone();
+        btn_copy_value.connect_clicked(move |_| {
+            let val = val_for_copy.borrow().clone();
+            if !val.is_empty() {
+                if let Some(display) = gdk::Display::default() {
+                    display.clipboard().set_text(&val);
+                }
+                let old_text = breadcrumb_for_val.text().to_string();
+                breadcrumb_for_val.set_text(tr!("✓ Valor copiado al portapapeles", "✓ Value copied to clipboard"));
+                let lbl = breadcrumb_for_val.clone();
                 glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
                     lbl.set_text(&old_text);
                 });
@@ -576,9 +652,11 @@ impl JsonTreeView {
             btn_expand_all,
             btn_collapse_all,
             btn_copy_path,
+            btn_copy_value,
             btn_prev_match,
             btn_next_match,
             current_access_path,
+            current_node_value,
             search_matches,
             current_match_idx,
         }
@@ -600,6 +678,10 @@ impl JsonTreeView {
         self.btn_copy_path.set_tooltip_text(Some(tr!(
             "Copiar ruta de acceso (ej. array[0].HotelCode)",
             "Copy access path (e.g. array[0].HotelCode)"
+        )));
+        self.btn_copy_value.set_tooltip_text(Some(tr!(
+            "Copiar valor o sub-JSON del nodo",
+            "Copy node value or sub-JSON"
         )));
         self.search_entry.set_placeholder_text(Some(tr!(
             "Buscar nodos o valores...",
@@ -631,12 +713,13 @@ impl JsonTreeView {
 
         match value {
             serde_json::Value::Array(_arr) => {
-                let root_node = JsonNodeObject::new("array", value, "array", "array");
+                let root_node = JsonNodeObject::new("array", value, "array", "");
                 root_model.append(&root_node);
             }
             serde_json::Value::Object(map) => {
                 for (k, v) in map {
-                    let node = JsonNodeObject::new(k, v, k, k);
+                    let access = format_child_access_path("", k);
+                    let node = JsonNodeObject::new(k, v, k, &access);
                     root_model.append(&node);
                 }
             }
@@ -658,6 +741,7 @@ impl JsonTreeView {
             "Select a node to view its path..."
         ));
         *self.current_access_path.borrow_mut() = String::new();
+        *self.current_node_value.borrow_mut() = String::new();
         self.lbl_search_count.set_label("");
     }
 }

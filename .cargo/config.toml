@@ -1,4 +1,0 @@
-[env]
-PKG_CONFIG_PATH = { value = "/home/programador/Documentos/projects/VarLens/.pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig", relative = false }
-LIBRARY_PATH = { value = "/home/programador/Documentos/projects/VarLens/.pkgconfig:/usr/lib64", relative = false }
-LD_LIBRARY_PATH = { value = "/home/programador/Documentos/projects/VarLens/.pkgconfig:/usr/lib64", relative = false }

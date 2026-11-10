@@ -18,6 +18,8 @@ value = {
         | uninitialized_val
         | printr_array
         | printr_object
+        | varexport_object
+        | varexport_array
     )
 }
 
@@ -77,7 +79,44 @@ recursion_val = { "*RECURSION*" }
 uninitialized_val = { "uninitialized(" ~ (!")" ~ ANY)+ ~ ")" }
 
 // Support for PHP print_r / Array raw format
-printr_array = { ^"Array" ~ "(" ~ printr_entry* ~ ")" }
+printr_array = { ^"Array" ~ "(" ~ printr_entry+ ~ ")" }
 printr_object = { class_name ~ ^"Object" ~ "(" ~ printr_entry* ~ ")" }
 printr_entry = { "[" ~ object_key ~ "]" ~ "=>" ~ NEWLINE* ~ (printr_array | printr_object | printr_scalar) }
 printr_scalar = @{ !("[" | ")" | "\r" | "\n") ~ (!("\r" | "\n") ~ ANY)* }
+
+// Support for PHP var_export / raw PHP array literals (`array(...)` or `[...]`)
+php_prefix = _{ ("<?php" | "<?")? ~ ^"return"? }
+varexport_array = {
+    php_prefix? ~ ((^"array" ~ "(" ~ varexport_entries? ~ ")") | ("[" ~ varexport_entries? ~ "]")) ~ ";"?
+}
+varexport_object = {
+    php_prefix? ~ (
+        (class_name ~ "::" ~ "__set_state" ~ "(" ~ varexport_array ~ ")")
+        | ("(" ~ ^"object" ~ ")" ~ varexport_array)
+        | ("stdClass::__set_state" ~ "(" ~ varexport_array ~ ")")
+    ) ~ ";"?
+}
+varexport_entries = { varexport_entry ~ ("," ~ varexport_entry)* ~ ","? }
+varexport_entry = { (varexport_key ~ "=>" ~ varexport_val) | varexport_val }
+varexport_key = { sq_string | quoted_key | int_lit | identifier }
+varexport_val = {
+    varexport_object
+    | varexport_array
+    | null_lit
+    | bool_lit
+    | float_raw
+    | int_lit
+    | sq_string
+    | quoted_string
+    | identifier
+}
+null_lit = { ^"null" }
+float_raw = @{
+    ("+" | "-")? ~ (
+        ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+        | "." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+        | ASCII_DIGIT+ ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
+    )
+}
+sq_string = ${ "'" ~ inner_sq_string ~ "'" }
+inner_sq_string = @{ ( "\\'" | "\\\\" | (!"'" ~ ANY) )* }
