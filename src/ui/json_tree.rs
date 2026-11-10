@@ -249,6 +249,7 @@ impl std::fmt::Debug for JsonTreeView {
 #[allow(dead_code)]
 pub struct JsonTreeView {
     container: gtk4::Box,
+    list_view: gtk4::ListView,
     tree_list_model: gtk4::TreeListModel,
     selection_model: gtk4::SingleSelection,
     lbl_breadcrumb: gtk4::Label,
@@ -644,6 +645,7 @@ impl JsonTreeView {
 
         Self {
             container,
+            list_view,
             tree_list_model,
             selection_model,
             lbl_breadcrumb,
@@ -664,6 +666,23 @@ impl JsonTreeView {
 
     pub fn widget(&self) -> &gtk4::Box {
         &self.container
+    }
+
+    pub fn refresh_theme(&self, is_dark: bool) {
+        let mut child_opt = self.list_view.first_child();
+        while let Some(row_widget) = child_opt {
+            if let Some(expander) = row_widget.first_child().and_downcast::<gtk4::TreeExpander>() {
+                if let (Some(tree_row), Some(label)) = (
+                    expander.list_row(),
+                    expander.child().and_downcast::<gtk4::Label>(),
+                ) {
+                    if let Some(node) = tree_row.item().and_downcast::<JsonNodeObject>() {
+                        label.set_markup(&node.format_markup(is_dark));
+                    }
+                }
+            }
+            child_opt = row_widget.next_sibling();
+        }
     }
 
     pub fn update_language(&self) {

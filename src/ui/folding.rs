@@ -288,6 +288,9 @@ impl FoldingController {
         let new_regions = find_fold_regions(&text);
 
         // Clear any old folds that no longer match
+        if let Some(header_tag) = buf.tag_table().lookup("fold-header-highlight") {
+            buf.remove_tag(&header_tag, &buf.start_iter(), &buf.end_iter());
+        }
         let mut folded = self.folded_lines.borrow_mut();
         folded.retain(|&line| {
             let tag_name = format!("fold-line-{}", line);
@@ -300,11 +303,19 @@ impl FoldingController {
                         buf.iter_at_line(reg.start_line as i32),
                         buf.iter_at_line(reg.end_line as i32),
                     ) {
+                        let header_start = start_iter;
+                        let mut header_end = start_iter;
+                        if !header_end.ends_line() {
+                            header_end.forward_to_line_end();
+                        }
                         if start_iter.forward_line()
                             && end_iter.backward_char()
                             && start_iter < end_iter
                         {
                             buf.apply_tag(&tag, &start_iter, &end_iter);
+                            if let Some(header_tag) = buf.tag_table().lookup("fold-header-highlight") {
+                                buf.apply_tag(&header_tag, &header_start, &header_end);
+                            }
                         }
                     }
                 }
@@ -323,5 +334,11 @@ impl FoldingController {
     pub fn set_line_numbers_visible(&self, visible: bool) {
         self.renderer_lines.set_visible(visible);
         self.renderer_lines.queue_draw();
+    }
+
+    /// Forces a redraw of the line number and folding gutters (e.g. on theme change).
+    pub fn queue_draw(&self) {
+        self.renderer_lines.queue_draw();
+        self.renderer_fold.queue_draw();
     }
 }

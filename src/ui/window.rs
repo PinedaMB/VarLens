@@ -335,15 +335,18 @@ impl VarDiffWindow {
             &inspector_buf,
             is_dark_init,
         );
+        imp.btn_theme_toggle.set_icon_name(if is_dark_init {
+            "weather-clear-symbolic"
+        } else {
+            "weather-clear-night-symbolic"
+        });
 
         let lb_clone = left_buf.clone();
         let rb_clone = right_buf.clone();
         let ib_clone = inspector_buf.clone();
         let tag_del_clone = tag_del;
         let tag_ins_clone = tag_ins;
-        let sdl_clone = imp.source_diff_left.get();
-        let sdr_clone = imp.source_diff_right.get();
-        let btc_clone = imp.box_tree_container.get();
+        let win_theme_weak = self.downgrade();
         style_manager.connect_dark_notify(move |sm| {
             let is_dark = sm.is_dark();
             Self::apply_schemes(&lb_clone, &rb_clone, &ib_clone, is_dark);
@@ -354,9 +357,29 @@ impl VarDiffWindow {
                 tag_del_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.96, 0.32, 0.35, 0.14)));
                 tag_ins_clone.set_paragraph_background_rgba(Some(&gdk::RGBA::new(0.10, 0.68, 0.35, 0.14)));
             }
-            sdl_clone.queue_draw();
-            sdr_clone.queue_draw();
-            btc_clone.queue_draw();
+            if let Some(win) = win_theme_weak.upgrade() {
+                let imp = win.imp();
+                imp.btn_theme_toggle.set_icon_name(if is_dark {
+                    "weather-clear-symbolic"
+                } else {
+                    "weather-clear-night-symbolic"
+                });
+                imp.source_diff_left.queue_draw();
+                imp.source_diff_right.queue_draw();
+                imp.box_tree_container.queue_draw();
+                if let Some(tree) = imp.json_tree.get() {
+                    tree.refresh_theme(is_dark);
+                }
+                if let Some(fi) = imp.fold_inspector.get() {
+                    fi.queue_draw();
+                }
+                if let Some(fl) = imp.fold_diff_left.get() {
+                    fl.queue_draw();
+                }
+                if let Some(fr) = imp.fold_diff_right.get() {
+                    fr.queue_draw();
+                }
+            }
         });
 
         // 3. Set Initial Syntax Highlighting Languages
