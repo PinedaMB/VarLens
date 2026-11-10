@@ -20,7 +20,7 @@
 
 ## 🌟 Why VarLens?
 
-Modern backend and full-stack developers constantly deal with diverse structured formats: API JSON responses, legacy XML payloads, PHP debugging dumps (`var_dump()`, `print_r()`), and complex file differences. 
+Modern backend and full-stack developers constantly deal with diverse structured formats: API JSON responses, legacy XML payloads, PHP debugging dumps (`var_dump()`, `print_r()`, `var_export()`), and complex file differences. 
 
 Web-based formatters compromise sensitive credentials and struggle with multi-megabyte payloads. Heavy IDEs are slow to open. 
 
@@ -52,34 +52,41 @@ Web-based formatters compromise sensitive credentials and struggle with multi-me
 ## ✨ Features at a Glance
 
 ### 🔍 Interactive JSON & XML Inspector
-- **Dual View Modes:** Seamlessly toggle between an editable source view with code folding (`GtkSourceView 5`) and an **Interactive Tree Explorer**.
-- **Collapsible Hierarchies:** Deep node unfolding and contracting with dedicated expand/collapse actions.
-- **Deep Query Search:** Live case-insensitive search across keys and values with match navigation (`1/N`) and auto-expansion.
-- **Instant Access Path Copying:** Click any node to generate and copy its programmatic access path (e.g., `data.users[0].credentials.api_key`) directly to your clipboard.
+- **Dual View Modes:** Seamlessly toggle between an editable source view with custom code folding (`GtkSourceView 5`) and an **Interactive Tree Explorer**.
+- **Semantic Type Badges in Tree View:** Styled visual pills for objects (`{}` with key count), arrays (`[]` with item count), strings (`STR`), links (`URL`), numbers (`NUM`), booleans (`BOOL`), and `NULL`.
+- **Collapsible Hierarchies & Gutter Folding:** Deep node unfolding in Tree View and non-destructive block folding in the code editor with active-line bold numbers and folded-block highlight bars.
+- **Interactive Code Minimap (`GtkSourceMap`):** Smooth 1:1 slider dragging and click-to-jump navigation across large payloads.
+- **Live Code & Tree Search:** Instant search inside the code editor (`Ctrl+F`) with match highlighting, plus case-insensitive key/value search in the Tree View with match navigation (`1/N`) and auto-expansion.
+- **Instant Path & Value Copying:** Click any node in the Tree View to copy its programmatic access path (e.g., `data.users[0]["api.key"]`) **or** copy its raw value / formatted sub-JSON directly to your clipboard.
+- **Recursive Key Sorting (`A→Z`):** Sort all JSON object keys alphabetically at every nesting level (`Ctrl+Shift+S`).
+- **XML to JSON Conversion:** Convert XML payloads (including `@attributes`, `#text`, and `CDATA` blocks) into structured JSON for inspection in the Interactive Tree Explorer.
 - **RFC 8259 & W3C Validation:** Live AST syntax validation badges, key counts, tree depth, and payload metrics.
 - **Flexible Formatting:** Format with 2 spaces, 4 spaces, or tabs, or compact into a single line (Minify).
 
-### 🐘 First-Class PHP `var_dump()` & `print_r()` Parser
+### 🐘 First-Class PHP `var_dump()`, `print_r()` & `var_export()` Parser
 - **Formal PEG Grammar:** Powered by a robust `pest` PEG parser that faithfully deserializes PHP dump outputs into valid JSON.
-- **Handles PHP Complexity:** Supports typed primitives (`bool`, `int`, `float`, `string(N)`), visibility modifiers (`public`, `protected`, `private`), sequential arrays, associative arrays, objects, and nested recursion flags (`*RECURSION*`).
-- **Raw Array Support:** Dedicated auto-detection and parsing for PHP `print_r()` / `Array raw` formats.
-- **One-Click Conversion:** Transform raw PHP dumps into formatted JSON with a single shortcut.
+- **Handles PHP Complexity:** Supports typed primitives (`bool`, `int`, `float`, `string(N)`), references (`&`), visibility modifiers (`public`, `protected`, `private`), sequential arrays, associative arrays, objects, and nested recursion flags (`*RECURSION*`).
+- **Raw Array & `var_export()` Support:** Dedicated auto-detection and parsing for PHP `print_r()` (`Array (...)`, `stdClass Object`), traditional `var_export()` (`array('k' => 'v')`, `ClassName::__set_state(...)`), and short array syntax (`['k' => 'v']`).
+- **One-Click Conversion:** Transform raw PHP dumps into formatted JSON (`Ctrl+Shift+J`) or explore them directly in the Interactive Tree View.
 
 ### ⚖️ Side-by-Side Visual Diff Comparator
-- **Synchronized Dual View:** Coordinated vertical scrolling and synchronized cursor tracking between base and modified editors.
-- **Granular Change Detection:** Visualizes line additions (green) and deletions (red), complemented by **inline word/character-level highlight spans**.
-- **Myers & Patience Algorithms:** Toggle between the standard Myers algorithm and the **Patience algorithm** in Preferences for clean, human-readable structural code diffs.
+- **Synchronized Dual View:** Coordinated vertical scrolling and synchronized cursor tracking between base and modified editors with distinct red/green panel header accents.
+- **Granular Change Detection:** Visualizes line additions (green) and deletions (red) with **3.5px vertical gutter stripes** and **inline word/character-level highlight spans**.
+- **Live Similarity Metric:** Real-time similarity percentage badge (`% similarity`) alongside addition/deletion counters.
+- **Diff Workflow Power Tools:**
+  - **Swap Panels (`↔`):** Swap Original (Left) and Modified (Right) contents in a single click.
+  - **Normalize Before Diff:** Auto-format and canonicalize both panels (JSON, XML, or PHP dumps) before comparing.
+  - **Export Unified Diff (`.patch`):** Copy standard Unified Diff patch output directly to your clipboard.
+- **Myers & Patience Algorithms:** Toggle between the standard Myers algorithm and the **Patience algorithm** in Preferences for clean, semantic structural diffs.
 - **Whitespace Agnostic:** Ignore whitespace differences with a single switch.
 - **Diff Chunk Navigation:** Jump quickly between changes with `Ctrl+[` and `Ctrl+]`.
 
-### ⚡ True Non-Blocking Concurrency
-- Payloads exceeding threshold limits are automatically offloaded to background threads (`std::thread`).
-- The Libadwaita user interface stays fluid at 60 FPS with zero micro-stutters during heavy computation.
-
-### 🌐 Native Internationalization (i18n)
-- Comprehensive multilingual interface: **English** and **Spanish**.
-- Dynamic, real-time language switching in Preferences without application restarts.
-- Auto-detects system locale (`$LANG`) and persists user preferences.
+### 🎨 Desktop UX, Themes & Internationalization
+- **Instant Light / Dark Theme Toggle:** Switch between custom `varlens-dark` and `varlens-light` themes directly from the HeaderBar with full synchronization across Libadwaita, GtkSourceView, and the Tree Explorer.
+- **One-Click Demo Loader:** Load rich, realistic sample payloads tailored to the active tool (`Diff`, `JSON`, `XML`, `var_dump`, or `print_r`).
+- **Drag & Drop + File Save:** Drag files directly into the window to inspect or compare, and save formatted outputs to disk (`Ctrl+S`).
+- **True Non-Blocking Concurrency:** Payloads exceeding threshold limits are automatically offloaded to background worker threads (`std::thread`), keeping the UI fluid at 60 FPS.
+- **Native Internationalization (i18n):** Real-time **English** and **Spanish** interface switching in Preferences without application restarts.
 
 ---
 
@@ -88,14 +95,17 @@ Web-based formatters compromise sensitive credentials and struggle with multi-me
 | Shortcut | Action | Scope |
 | :--- | :--- | :--- |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | Open File | Global |
+| <kbd>Ctrl</kbd> + <kbd>S</kbd> | Save Formatted Output to File | Global |
+| <kbd>Ctrl</kbd> + <kbd>F</kbd> | Focus Live Code Search | Inspector |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> | Format / Prettify Content | Inspector |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> | Minify Content | Inspector |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>J</kbd> | Convert `var_dump` / XML to JSON | Inspector |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | Sort JSON Keys Alphabetically (`A→Z`) | Inspector |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>J</kbd> | Convert `var_dump` / `print_r` / XML to JSON | Inspector |
 | <kbd>Ctrl</kbd> + <kbd>Enter</kbd> | Recalculate Differences | Diff Viewer |
 | <kbd>Ctrl</kbd> + <kbd>[</kbd> | Jump to Previous Difference | Diff Viewer |
 | <kbd>Ctrl</kbd> + <kbd>]</kbd> | Jump to Next Difference | Diff Viewer |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> | Clear All Diff Inputs | Diff Viewer |
-| <kbd>Ctrl</kbd> + <kbd>?</kbd> | View Shortcuts Dialog | Global |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> / <kbd>D</kbd> | Clear All Diff Inputs | Diff Viewer |
+| <kbd>F1</kbd> / <kbd>Ctrl</kbd> + <kbd>?</kbd> | View Shortcuts Dialog | Global |
 
 ---
 
@@ -105,9 +115,9 @@ Web-based formatters compromise sensitive credentials and struggle with multi-me
 - **UI Toolkit:** [GTK 4.12+](https://gtk.org/) via [`gtk4-rs`](https://gtk-rs.org/)
 - **Human Interface Guidelines:** [Libadwaita 1.5+](https://gnome.pages.gitlab.gnome.org/libadwaita/)
 - **Source Editor:** [GtkSourceView 5](https://gitlab.gnome.org/GNOME/gtksourceview) with custom light and dark color schemes
-- **Diff Engine:** [`similar`](https://crates.io/crates/similar) with inline diff computation
-- **Parser Engine:** [`pest`](https://pest.rs/) PEG grammar parser
-- **Serialization:** [`serde_json`](https://crates.io/crates/serde_json) with key order preservation
+- **Diff Engine:** [`similar`](https://crates.io/crates/similar) with Myers & Patience algorithms and inline span computation
+- **Parser Engine:** [`pest`](https://pest.rs/) PEG grammar parser + [`roxmltree`](https://crates.io/crates/roxmltree)
+- **Serialization:** [`serde_json`](https://crates.io/crates/serde_json) with key order preservation (`preserve_order`)
 
 ---
 
@@ -122,9 +132,9 @@ Ensure you have Rust and the required GTK4 / Libadwaita development libraries in
 sudo dnf install -y rust cargo gtk4-devel libadwaita-devel gtksourceview5-devel
 ```
 
-#### Ubuntu / Debian (23.04+)
+#### Ubuntu / Debian / Zorin OS (24.04+)
 ```bash
-sudo apt install -y cargo rustc libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev
+sudo apt install -y cargo rustc pkg-config libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev
 ```
 
 #### Arch Linux
@@ -139,7 +149,7 @@ sudo pacman -S rust gtk4 libadwaita gtksourceview5
 git clone https://github.com/PinedaMB/VarLens.git
 cd VarLens
 
-# Run test suite
+# Run unit test suite
 cargo test
 
 # Build and execute in development mode
@@ -177,6 +187,12 @@ update-desktop-database ~/.local/share/applications
 ### Windows Portable
 
 Download `VarLens-windows-x86_64.zip` from [Releases](https://github.com/PinedaMB/VarLens/releases), extract the ZIP archive, and run `varlens.exe`. No installation or runtime dependencies required.
+
+---
+
+## 🗺️ Roadmap
+
+Planned upcoming features—including **PHP `serialize()` support**, **inline smart decoding (escaped JSON, JWT, Base64)**, **live JSONPath/XPath querying**, **semantic Tree Diff**, **type/struct code generation**, and **CLI/stdin pipe support**—are documented in detail in **[ROADMAP.md](ROADMAP.md)**.
 
 ---
 
