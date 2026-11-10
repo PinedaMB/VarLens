@@ -46,6 +46,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.1.0" date="2026-11-10">
+      <description>
+        <p>Major visual and functional update: semantic Tree View type badges, value copying, recursive JSON key sorting, XML to JSON conversion, PHP var_export() and short array support, Diff similarity metrics, panel swap/normalize/patch export, interactive Demo loader, Light/Dark theme toggle, and smooth minimap dragging.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-11-08">
       <description>
         <p>Initial official production release of VarLens.</p>

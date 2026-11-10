@@ -6,7 +6,7 @@
 
 ### The modern, blazing-fast native Linux developer lens for inspecting, visualizing, converting, and diffing structured data.
 
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/PinedaMB/VarLens/releases)
+[![Release](https://img.shields.io/badge/release-v1.1.0-blue.svg)](https://github.com/PinedaMB/VarLens/releases)
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![GTK4](https://img.shields.io/badge/GTK-4.12+-green.svg)](https://gtk.org)
 [![Libadwaita](https://img.shields.io/badge/libadwaita-1.5+-purple.svg)](https://gnome.pages.gitlab.gnome.org/libadwaita)

@@ -77,7 +77,7 @@ fn main() -> glib::ExitCode {
                     .application_name("VarLens")
                     .application_icon("io.github.PinedaMB.VarLens")
                     .developer_name("Brayan Pineda")
-                    .version("1.0.0")
+                    .version("1.1.0")
                     .website("https://github.com/PinedaMB/VarLens")
                     .support_url("https://buymeacoffee.com/rainbowfacp")
                     .license_type(gtk4::License::MitX11)

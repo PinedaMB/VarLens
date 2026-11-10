@@ -76,7 +76,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">v1.0.0</property>
+                    <property name="label">v1.1.0</property>
                     <style>
                       <class name="badge-pill"/>
                     </style>
