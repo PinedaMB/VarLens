@@ -4,10 +4,14 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>VarLens</name>
-  <summary>Modern developer lens for JSON, XML, PHP var_dump and visual Diff inspection</summary>
+  <summary>Inspect and compare data</summary>
   <developer id="io.github.pinedamb">
     <name>Brayan Pineda</name>
   </developer>
+  <branding>
+    <color type="primary" scheme_preference="light">#3584e4</color>
+    <color type="primary" scheme_preference="dark">#1a5fb4</color>
+  </branding>
   <description>
     <p>
       VarLens is a fast, native Linux developer desktop application built with Rust, GTK4, and Libadwaita.

@@ -23,7 +23,7 @@ modules:
   - name: varlens
     buildsystem: simple
     build-commands:
-      - cargo --offline build --release --verbose
+      - cargo --offline build --locked --release --verbose
       - install -Dm755 target/release/varlens -t /app/bin/
       - install -Dm644 data/${FLATPAK_ID}.desktop -t /app/share/applications/
       - install -Dm644 data/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg -t /app/share/icons/hicolor/scalable/apps/
@@ -31,6 +31,13 @@ modules:
     sources:
       - type: git
         url: https://github.com/PinedaMB/VarLens.git
-        tag: v1.0.0
-        commit: e2d13f70d48b0d67182071eb8901c200e308670e
+        tag: v1.1.0
+        commit: 25768bc14f3f9114c7d4ba87103126825a512bde
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/PinedaMB/VarLens/releases/latest
+          tag-query: .tag_name
+          version-query: '$tag | ltrimstr("v")'
+          timestamp-query: .published_at
+          is-main-source: true
       - cargo-sources.json
