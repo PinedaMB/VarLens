@@ -639,53 +639,53 @@
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/pest/pest-2.9.5.crate",
-    "sha256": "a8db75153506001cb36ed924f08cadc862eb3f8c4d0d534139f29074769d7660",
-    "dest": "cargo-crates/pest-2.9.5"
+    "url": "https://static.crates.io/crates/pest/pest-2.9.6.crate",
+    "sha256": "5ec53fd1d256900a9a771bf2720d42cef6f8bc91b4e25065fbd291e3e7222576",
+    "dest": "cargo-crates/pest-2.9.6"
   },
   {
     "type": "inline",
-    "contents": "{\"package\": \"a8db75153506001cb36ed924f08cadc862eb3f8c4d0d534139f29074769d7660\", \"files\": {}}",
-    "dest": "cargo-crates/pest-2.9.5",
+    "contents": "{\"package\": \"5ec53fd1d256900a9a771bf2720d42cef6f8bc91b4e25065fbd291e3e7222576\", \"files\": {}}",
+    "dest": "cargo-crates/pest-2.9.6",
     "dest-filename": ".cargo-checksum.json"
   },
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/pest_derive/pest_derive-2.9.5.crate",
-    "sha256": "20aa17e11fb35664b67d5214a0afac57a360d231b6ec53d6eba0700b27d933b4",
-    "dest": "cargo-crates/pest_derive-2.9.5"
+    "url": "https://static.crates.io/crates/pest_derive/pest_derive-2.9.6.crate",
+    "sha256": "adcf794fd301ddc20818a6b4de85ed507f4b45300245cec948982e69e12e3bd7",
+    "dest": "cargo-crates/pest_derive-2.9.6"
   },
   {
     "type": "inline",
-    "contents": "{\"package\": \"20aa17e11fb35664b67d5214a0afac57a360d231b6ec53d6eba0700b27d933b4\", \"files\": {}}",
-    "dest": "cargo-crates/pest_derive-2.9.5",
+    "contents": "{\"package\": \"adcf794fd301ddc20818a6b4de85ed507f4b45300245cec948982e69e12e3bd7\", \"files\": {}}",
+    "dest": "cargo-crates/pest_derive-2.9.6",
     "dest-filename": ".cargo-checksum.json"
   },
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/pest_generator/pest_generator-2.9.5.crate",
-    "sha256": "626ec5afccf44ccbfeb2b232316510bb55b4bf34d891afcb0fb07d2b17d7fe9d",
-    "dest": "cargo-crates/pest_generator-2.9.5"
+    "url": "https://static.crates.io/crates/pest_generator/pest_generator-2.9.6.crate",
+    "sha256": "c3073afae5db334c25dea9fc3e230a4f191e920c1df080cb9c0b37c9ce1dbb41",
+    "dest": "cargo-crates/pest_generator-2.9.6"
   },
   {
     "type": "inline",
-    "contents": "{\"package\": \"626ec5afccf44ccbfeb2b232316510bb55b4bf34d891afcb0fb07d2b17d7fe9d\", \"files\": {}}",
-    "dest": "cargo-crates/pest_generator-2.9.5",
+    "contents": "{\"package\": \"c3073afae5db334c25dea9fc3e230a4f191e920c1df080cb9c0b37c9ce1dbb41\", \"files\": {}}",
+    "dest": "cargo-crates/pest_generator-2.9.6",
     "dest-filename": ".cargo-checksum.json"
   },
   {
     "type": "archive",
     "archive-type": "tar-gzip",
-    "url": "https://static.crates.io/crates/pest_meta/pest_meta-2.9.5.crate",
-    "sha256": "b3f45b6caa65c1b08186832745159c2529994146340a7bf44168095469720f5d",
-    "dest": "cargo-crates/pest_meta-2.9.5"
+    "url": "https://static.crates.io/crates/pest_meta/pest_meta-2.9.6.crate",
+    "sha256": "7bc7f614b3742541642af1685faaa910bf6333e3cd3729c2cccd118146a57327",
+    "dest": "cargo-crates/pest_meta-2.9.6"
   },
   {
     "type": "inline",
-    "contents": "{\"package\": \"b3f45b6caa65c1b08186832745159c2529994146340a7bf44168095469720f5d\", \"files\": {}}",
-    "dest": "cargo-crates/pest_meta-2.9.5",
+    "contents": "{\"package\": \"7bc7f614b3742541642af1685faaa910bf6333e3cd3729c2cccd118146a57327\", \"files\": {}}",
+    "dest": "cargo-crates/pest_meta-2.9.6",
     "dest-filename": ".cargo-checksum.json"
   },
   {
