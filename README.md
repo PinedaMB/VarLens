@@ -6,7 +6,14 @@
 
 ### The modern, blazing-fast native Linux developer lens for inspecting, visualizing, converting, and diffing structured data.
 
-[![Release](https://img.shields.io/badge/release-v1.1.0-blue.svg)](https://github.com/PinedaMB/VarLens/releases)
+<a href="https://flathub.org/apps/io.github.PinedaMB.VarLens">
+  <img src="https://dl.flathub.org/assets/badges/flathub-badge-en.svg" alt="Download on Flathub" width="240" />
+</a>
+
+<br/><br/>
+
+[![Flathub](https://img.shields.io/flathub/v/io.github.PinedaMB.VarLens?color=0078D7&logo=flathub&logoColor=white)](https://flathub.org/apps/io.github.PinedaMB.VarLens)
+[![Release](https://img.shields.io/badge/release-v1.1.1-blue.svg)](https://github.com/PinedaMB/VarLens/releases)
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![GTK4](https://img.shields.io/badge/GTK-4.12+-green.svg)](https://gtk.org)
 [![Libadwaita](https://img.shields.io/badge/libadwaita-1.5+-purple.svg)](https://gnome.pages.gitlab.gnome.org/libadwaita)
@@ -37,13 +44,13 @@ Web-based formatters compromise sensitive credentials and struggle with multi-me
 
 <br/><br/>
 
-| Interactive JSON Tree Explorer | JSON Inspector &amp; Live AST Metrics |
+| Interactive Tree Explorer | JSON Inspector &amp; Live AST Metrics |
 | :---: | :---: |
 | <img src="screenshots/tree-view.png" width="450" alt="Tree View" /> | <img src="screenshots/inspector-json.png" width="450" alt="JSON Inspector" /> |
 
-| PHP `var_dump()` &amp; `print_r()` Parser | XML Inspector &amp; Converter |
+| PHP `var_dump()` &amp; `print_r()` Parser | XML Inspector &amp; W3C Validation |
 | :---: | :---: |
-| <img src="screenshots/inspector-vardump.png" width="450" alt="PHP var_dump Inspector" /> | <img src="screenshots/inspector-xml.png" width="450" alt="XML Inspector" /> |
+| <img src="screenshots/inspector-vardump.png" width="450" alt="PHP var_dump Inspector" /> | <img src="screenshots/inspector-xml.png" width="450" alt="XML Inspector &amp; W3C Validation" /> |
 
 </div>
 
@@ -118,6 +125,26 @@ Web-based formatters compromise sensitive credentials and struggle with multi-me
 - **Diff Engine:** [`similar`](https://crates.io/crates/similar) with Myers & Patience algorithms and inline span computation
 - **Parser Engine:** [`pest`](https://pest.rs/) PEG grammar parser + [`roxmltree`](https://crates.io/crates/roxmltree)
 - **Serialization:** [`serde_json`](https://crates.io/crates/serde_json) with key order preservation (`preserve_order`)
+
+---
+
+## 📥 Installation
+
+### Flathub (Recommended)
+
+VarLens is available on [Flathub](https://flathub.org/apps/io.github.PinedaMB.VarLens) for all major Linux distributions:
+
+<a href="https://flathub.org/apps/io.github.PinedaMB.VarLens">
+  <img src="https://dl.flathub.org/assets/badges/flathub-badge-en.svg" alt="Download on Flathub" width="200" />
+</a>
+
+```bash
+# Install from Flathub
+flatpak install flathub io.github.PinedaMB.VarLens
+
+# Run VarLens
+flatpak run io.github.PinedaMB.VarLens
+```
 
 ---
 

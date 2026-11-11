@@ -9,8 +9,8 @@
     <name>Brayan Pineda</name>
   </developer>
   <branding>
-    <color type="primary" scheme_preference="light">#3584e4</color>
-    <color type="primary" scheme_preference="dark">#1a5fb4</color>
+    <color type="primary" scheme_preference="light">#1b7688</color>
+    <color type="primary" scheme_preference="dark">#249cb2</color>
   </branding>
   <description>
     <p>
@@ -37,19 +37,32 @@
   <screenshots>
     <screenshot type="default">
       <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/tree-view.png</image>
-      <caption>Interactive JSON Tree exploration and live node filtering</caption>
+      <caption>Interactive Tree exploration and live node filtering</caption>
     </screenshot>
     <screenshot>
       <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/diff-view.png</image>
       <caption>Side-by-side visual diff comparator with token highlighting</caption>
     </screenshot>
     <screenshot>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/inspector-json.png</image>
+      <caption>High-performance JSON inspector and formatter</caption>
+    </screenshot>
+    <screenshot>
       <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/inspector-vardump.png</image>
       <caption>PHP var_dump and print_r raw array parser</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PinedaMB/VarLens/master/screenshots/inspector-xml.png</image>
+      <caption>XML inspector with syntax validation and formatting</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.1.1" date="2026-11-11">
+      <description>
+        <p>Maintenance patch release: standardized AppStream screenshots and metadata, Flathub distribution badge, and updated Pest dependencies.</p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-11-10">
       <description>
         <p>Major visual and functional update: semantic Tree View type badges, value copying, recursive JSON key sorting, XML to JSON conversion, PHP var_export() and short array support, Diff similarity metrics, panel swap/normalize/patch export, interactive Demo loader, Light/Dark theme toggle, and smooth minimap dragging.</p>
