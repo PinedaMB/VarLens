@@ -34,10 +34,7 @@ modules:
         tag: v1.1.1
         commit: 2f76a63f8a0bfab9efccceead5bf89956cba6007
         x-checker-data:
-          type: json
-          url: https://api.github.com/repos/PinedaMB/VarLens/releases/latest
-          tag-query: .tag_name
-          version-query: '$tag | ltrimstr("v")'
-          timestamp-query: .published_at
+          type: git
+          tag-pattern: ^v([0-9.]+)$
           is-main-source: true
       - cargo-sources.json
