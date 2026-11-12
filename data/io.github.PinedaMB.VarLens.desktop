@@ -5,6 +5,6 @@ Exec=varlens
 Icon=io.github.PinedaMB.VarLens
 Terminal=false
 Type=Application
-Categories=Development;Utility;TextEditor;
+Categories=Development;
 StartupNotify=true
 Keywords=json;vardump;php;diff;formatter;development;
