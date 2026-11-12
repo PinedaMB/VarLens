@@ -1,51 +1,42 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Sombra base GNOME HIG -->
-    <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.35" />
-    </filter>
-
-    <!-- Gradiente de la placa principal -->
+    <!-- Gradiente de la placa principal con contraste mejorado -->
     <linearGradient id="basePlate" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#3d3846" />
-      <stop offset="100%" stop-color="#241f31" />
+      <stop offset="0%" stop-color="#464052" />
+      <stop offset="100%" stop-color="#2c2738" />
     </linearGradient>
 
-    <!-- Resaltado superior de borde (Highlight de 1px) -->
-    <linearGradient id="edgeHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02" />
+    <!-- Resaltado de borde para alto contraste en fondos claros y oscuros -->
+    <linearGradient id="edgeBorder" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8a809e" />
+      <stop offset="100%" stop-color="#544c61" />
     </linearGradient>
   </defs>
 
-  <!-- Sombra general del cuerpo -->
-  <rect x="20" y="18" width="88" height="96" rx="16" fill="#000000" opacity="0.3" filter="url(#drop-shadow)" />
-
-  <!-- Bloque principal redondeado (Placa base) -->
-  <rect x="20" y="16" width="88" height="96" rx="16" fill="url(#basePlate)" />
-  <rect x="20" y="16" width="88" height="96" rx="16" fill="none" stroke="url(#edgeHighlight)" stroke-width="1.5" />
+  <!-- Bloque principal redondeado (Placa base según plantilla oficial GNOME/Flathub: 88x104, x=20, y=12, rx=16) -->
+  <rect x="20" y="12" width="88" height="104" rx="16" fill="url(#basePlate)" stroke="url(#edgeBorder)" stroke-width="1.5" />
 
   <!-- Canal divisor central de diff -->
-  <line x1="64" y1="24" x2="64" y2="104" stroke="#1b1723" stroke-width="2" stroke-dasharray="4 2" />
+  <line x1="64" y1="20" x2="64" y2="108" stroke="#1f1b27" stroke-width="2" stroke-dasharray="4 2" />
 
-  <!-- Panel Izquierdo: Supresión / Formato viejo (Rojo GNOME) -->
+  <!-- Panel Izquierdo: Supresión / Formato original (Rojo GNOME) -->
   <g id="diff-left">
     <!-- Indicador de cambio suprimido / original -->
-    <rect x="28" y="32" width="28" height="6" rx="3" fill="#e01b24" />
-    <rect x="28" y="44" width="20" height="6" rx="3" fill="#c01c28" opacity="0.6" />
-    <!-- Glifo { estilizado en bajo relieve -->
-    <path d="M 44 60 C 40 60 38 62 38 66 L 38 70 C 38 73 35 74 33 75 C 35 76 38 77 38 80 L 38 84 C 38 88 40 90 44 90" fill="none" stroke="#ed333b" stroke-width="3" stroke-linecap="round" />
+    <rect x="28" y="28" width="28" height="6" rx="3" fill="#e01b24" />
+    <rect x="28" y="40" width="20" height="6" rx="3" fill="#c01c28" opacity="0.75" />
+    <!-- Glifo { estilizado -->
+    <path d="M 45 56 C 41 56 39 58 39 62 L 39 67 C 39 70 36 71 34 72 C 36 73 39 74 39 77 L 39 82 C 39 86 41 88 45 88" fill="none" stroke="#ed333b" stroke-width="3" stroke-linecap="round" />
   </g>
 
-  <!-- Panel Derecho: Adición / JSON limpio (Verde GNOME) -->
+  <!-- Panel Derecho: Adición / Formato modificado (Verde GNOME) -->
   <g id="diff-right">
     <!-- Indicador de cambio añadido / formateado -->
-    <rect x="72" y="32" width="28" height="6" rx="3" fill="#33d17a" />
-    <rect x="80" y="44" width="20" height="6" rx="3" fill="#2ec27e" opacity="0.8" />
+    <rect x="72" y="28" width="28" height="6" rx="3" fill="#33d17a" />
+    <rect x="80" y="40" width="20" height="6" rx="3" fill="#2ec27e" opacity="0.85" />
     <!-- Glifo } estilizado -->
-    <path d="M 84 60 C 88 60 90 62 90 66 L 90 70 C 90 73 93 74 95 75 C 93 76 90 77 90 80 L 90 84 C 90 88 88 90 84 90" fill="none" stroke="#57e389" stroke-width="3" stroke-linecap="round" />
+    <path d="M 83 56 C 87 56 89 58 89 62 L 89 67 C 89 70 92 71 94 72 C 92 73 89 74 89 77 L 89 82 C 89 86 87 88 83 88" fill="none" stroke="#57e389" stroke-width="3" stroke-linecap="round" />
   </g>
 
   <!-- Acabado superior: Bisel de luz superior -->
-  <path d="M 36 17 L 92 17" stroke="#ffffff" stroke-width="1" stroke-opacity="0.25" stroke-linecap="round" />
+  <path d="M 36 13 L 92 13" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.35" stroke-linecap="round" />
 </svg>

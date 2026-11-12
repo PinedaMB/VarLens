@@ -18,14 +18,14 @@
         <attribute name="action">win.show-help-overlay</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Acerca de VarLens</attribute>
+        <attribute name="label" translatable="yes">Acerca de Varlens</attribute>
         <attribute name="action">app.about</attribute>
       </item>
     </section>
   </menu>
 
   <template class="VarDiffWindow" parent="AdwApplicationWindow">
-    <property name="title" translatable="yes">VarLens</property>
+    <property name="title" translatable="yes">Varlens</property>
     <property name="default-width">1200</property>
     <property name="default-height">780</property>
     <property name="content">
@@ -68,7 +68,7 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">VarLens</property>
+                    <property name="label">Varlens</property>
                     <style>
                       <class name="heading"/>
                     </style>

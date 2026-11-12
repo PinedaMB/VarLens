@@ -74,7 +74,7 @@ fn main() -> glib::ExitCode {
             if let Some(app) = app_weak.upgrade() {
                 let active_win = app.active_window();
                 let about = adw::AboutDialog::builder()
-                    .application_name("VarLens")
+                    .application_name("Varlens")
                     .application_icon("io.github.PinedaMB.VarLens")
                     .developer_name("Brayan Pineda")
                     .version("1.1.1")

@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=VarLens
+Name=Varlens
 Comment=JSON Formatter, PHP var_dump Converter and Diff Tool
 Exec=varlens
 Icon=io.github.PinedaMB.VarLens

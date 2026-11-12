@@ -3,7 +3,7 @@
   <id>io.github.PinedaMB.VarLens</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>VarLens</name>
+  <name>Varlens</name>
   <summary>Inspect and compare data</summary>
   <developer id="io.github.pinedamb">
     <name>Brayan Pineda</name>
@@ -14,7 +14,7 @@
   </branding>
   <description>
     <p>
-      VarLens is a fast, native Linux developer desktop application built with Rust, GTK4, and Libadwaita.
+      Varlens is a fast, native Linux developer desktop application built with Rust, GTK4, and Libadwaita.
       It empowers developers to inspect, format, explore, and diff structured data efficiently:
     </p>
     <ul>
@@ -70,7 +70,7 @@
     </release>
     <release version="1.0.0" date="2026-11-08">
       <description>
-        <p>Initial official production release of VarLens.</p>
+        <p>Initial official production release of Varlens.</p>
       </description>
     </release>
   </releases>

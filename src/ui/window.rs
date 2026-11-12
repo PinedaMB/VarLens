@@ -731,7 +731,7 @@ impl VarDiffWindow {
             Some(tr!("Atajos del teclado y detalles", "Keyboard shortcuts & details")),
             Some("win.show-help-overlay"),
         );
-        sec2.append(Some(tr!("Acerca de VarLens", "About VarLens")), Some("app.about"));
+        sec2.append(Some(tr!("Acerca de Varlens", "About Varlens")), Some("app.about"));
         menu.append_section(None, &sec2);
         imp.btn_primary_menu.set_menu_model(Some(&menu));
 
@@ -2030,7 +2030,7 @@ impl VarDiffWindow {
 )"#
             } else {
                 r#"{
-  "application": "VarLens",
+  "application": "Varlens",
   "release": "1.1.1",
   "engine": {
     "language": "Rust 2021",
@@ -2706,7 +2706,7 @@ impl VarDiffWindow {
         // --- 2. Grupo Detalles y Capacidades ---
         let grp_features = adw::PreferencesGroup::builder()
             .title(tr!("Detalles y Capacidades", "Features &amp; Details"))
-            .description(tr!("Puntos destacados de la arquitectura de VarLens", "Core architecture highlights of VarLens"))
+            .description(tr!("Puntos destacados de la arquitectura de Varlens", "Core architecture highlights of Varlens"))
             .build();
 
         let make_feature_row = |icon_name: &str, title: &str, subtitle: &str| {
