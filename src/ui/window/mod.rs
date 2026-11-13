@@ -1446,7 +1446,7 @@ impl VarDiffWindow {
             } else {
                 r#"{
   "application": "Varlens",
-  "release": "1.1.1",
+  "release": "1.2.0",
   "engine": {
     "language": "Rust 2021",
     "ui_toolkit": "GTK4 + Libadwaita",
