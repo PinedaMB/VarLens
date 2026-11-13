@@ -1,8 +1,10 @@
 use crate::core::diff::{compute_diff_ext, DiffSummary};
 use crate::core::json::{
-    analyze_json, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
+    analyze_json, analyze_value, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
 };
-use crate::core::vardump::{is_printr_raw, parse_vardump, vardump_to_json_string};
+use crate::core::vardump::{
+    format_vardump_with_indent, is_printr_raw, parse_vardump, vardump_to_json_string,
+};
 use crate::core::xml::{analyze_xml, format_xml_with_indent, xml_to_json_string};
 use crate::i18n::{self, Language};
 use crate::tr;
@@ -24,13 +26,25 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+mod diff;
+mod file_io;
+mod inspector;
+
 const ASYNC_LINE_THRESHOLD: usize = 1000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InspectorFormatMode {
+    Json,
+    Xml,
+    PhpVarDump,
+    PhpRaw,
+}
 
 enum WorkerResult {
     InspectorFormatted {
         text: String,
         message: String,
-        is_xml: bool,
+        mode: InspectorFormatMode,
     },
     DiffCalculated(DiffSummary),
     Error(String),
@@ -47,7 +61,7 @@ mod imp {
     use super::*;
 
     #[derive(Debug, Default, gtk4::CompositeTemplate)]
-    #[template(file = "window.ui")]
+    #[template(file = "../window.ui")]
     pub struct VarDiffWindow {
         #[template_child]
         pub main_stack: TemplateChild<adw::ViewStack>,
@@ -116,8 +130,6 @@ mod imp {
         #[template_child]
         pub lbl_diff_similarity: TemplateChild<gtk4::Label>,
         #[template_child]
-        pub lbl_detect_mode: TemplateChild<gtk4::Label>,
-        #[template_child]
         pub sw_ignore_whitespace: TemplateChild<gtk4::Switch>,
         #[template_child]
         pub lbl_ignore_whitespace: TemplateChild<gtk4::Label>,
@@ -182,8 +194,6 @@ mod imp {
         #[template_child]
         pub lbl_tree_stats: TemplateChild<gtk4::Label>,
         #[template_child]
-        pub lbl_rfc_badge: TemplateChild<gtk4::Label>,
-        #[template_child]
         pub lbl_inspector_status: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_indent_info: TemplateChild<gtk4::Label>,
@@ -210,15 +220,12 @@ mod imp {
         #[template_child]
         pub pref_patience: TemplateChild<adw::SwitchRow>,
 
-        // Global footer
-        #[template_child]
-        pub lbl_footer_diff_badge: TemplateChild<gtk4::Label>,
-
         // Internal state & tags
         pub tag_deleted: OnceCell<gtk4::TextTag>,
         pub tag_inserted: OnceCell<gtk4::TextTag>,
         pub tag_span_deleted: OnceCell<gtk4::TextTag>,
         pub tag_span_inserted: OnceCell<gtk4::TextTag>,
+        pub tag_syntax_error: OnceCell<gtk4::TextTag>,
         pub hunk_positions: RefCell<Vec<(usize, usize)>>,
         pub last_unified_diff: RefCell<String>,
         pub current_hunk_idx: Cell<usize>,
@@ -323,10 +330,18 @@ impl VarDiffWindow {
         right_buf.tag_table().add(&tag_ins);
         right_buf.tag_table().add(&tag_span_ins);
 
+        let tag_err = gtk4::TextTag::builder()
+            .name("syntax_error")
+            .underline(gtk4::pango::Underline::Error)
+            .underline_rgba(&gdk::RGBA::new(0.96, 0.38, 0.32, 1.0))
+            .build();
+        inspector_buf.tag_table().add(&tag_err);
+
         imp.tag_deleted.set(tag_del.clone()).ok();
         imp.tag_inserted.set(tag_ins.clone()).ok();
         imp.tag_span_deleted.set(tag_span_del).ok();
         imp.tag_span_inserted.set(tag_span_ins).ok();
+        imp.tag_syntax_error.set(tag_err).ok();
 
         // 2. Configure Style Schemes & Dark/Light Mode Adaptivity
         Self::apply_schemes(
@@ -441,68 +456,6 @@ impl VarDiffWindow {
 
         // 10. Start with clean editors and initialize metrics & language texts
         self.update_ui_texts();
-    }
-
-    fn set_buffer_language(buf: &gtk4::TextBuffer, lang_id: &str) {
-        let lang_mgr = sourceview5::LanguageManager::default();
-        if let Some(sbuf) = buf.downcast_ref::<sourceview5::Buffer>() {
-            let lang = lang_mgr.language(lang_id);
-            sbuf.set_language(lang.as_ref());
-        }
-    }
-
-    fn apply_schemes(
-        left_buf: &gtk4::TextBuffer,
-        right_buf: &gtk4::TextBuffer,
-        inspector_buf: &gtk4::TextBuffer,
-        is_dark: bool,
-    ) {
-        if let Some(sbuf) = left_buf.downcast_ref::<sourceview5::Buffer>() {
-            EditorView::update_scheme(sbuf, is_dark);
-        }
-        if let Some(sbuf) = right_buf.downcast_ref::<sourceview5::Buffer>() {
-            EditorView::update_scheme(sbuf, is_dark);
-        }
-        if let Some(sbuf) = inspector_buf.downcast_ref::<sourceview5::Buffer>() {
-            EditorView::update_scheme(sbuf, is_dark);
-        }
-    }
-
-    fn sync_scrolling(left: &gtk4::ScrolledWindow, right: &gtk4::ScrolledWindow) {
-        let left_adj = left.vadjustment();
-        let right_adj = right.vadjustment();
-
-        let updating = Arc::new(AtomicBool::new(false));
-
-        let up1 = updating.clone();
-        let right_adj_clone = right_adj.clone();
-        left_adj.connect_value_changed(move |adj| {
-            if up1.load(Ordering::SeqCst) {
-                return;
-            }
-            up1.store(true, Ordering::SeqCst);
-            right_adj_clone.set_value(adj.value());
-            up1.store(false, Ordering::SeqCst);
-        });
-
-        let up2 = updating;
-        let left_adj_clone = left_adj.clone();
-        right_adj.connect_value_changed(move |adj| {
-            if up2.load(Ordering::SeqCst) {
-                return;
-            }
-            up2.store(true, Ordering::SeqCst);
-            left_adj_clone.set_value(adj.value());
-            up2.store(false, Ordering::SeqCst);
-        });
-    }
-
-    fn current_indent_style(&self) -> IndentStyle {
-        match self.imp().dd_indent.selected() {
-            1 => IndentStyle::Spaces4,
-            2 => IndentStyle::Tabs,
-            _ => IndentStyle::Spaces2,
-        }
     }
 
     fn setup_signals(&self) {
@@ -680,12 +633,15 @@ impl VarDiffWindow {
 
         // Language preference change signal
         let win_p_lang = self.clone();
-        imp.pref_language.set_selected(i18n::current_language().as_u8() as u32);
+        imp.pref_language.set_selected(i18n::saved_preference_index());
         imp.pref_language.connect_selected_notify(move |row| {
-            let sel = row.selected();
-            let new_lang = Language::from_u8(sel as u8);
-            if new_lang != i18n::current_language() {
-                i18n::set_language(new_lang);
+            let prev_lang = i18n::current_language();
+            match row.selected() {
+                0 => i18n::set_language_auto(),
+                1 => i18n::set_language(Language::Spanish),
+                _ => i18n::set_language(Language::English),
+            }
+            if i18n::current_language() != prev_lang {
                 win_p_lang.update_ui_texts();
             }
         });
@@ -776,7 +732,6 @@ impl VarDiffWindow {
         imp.btn_copy_right.set_tooltip_text(Some(tr!("Copiar código nuevo", "Copy modified code")));
         imp.btn_paste_right.set_tooltip_text(Some(tr!("Pegar del portapapeles", "Paste from clipboard")));
         imp.btn_load_right.set_tooltip_text(Some(tr!("Cargar archivo modificado", "Load modified file")));
-        imp.lbl_detect_mode.set_label(tr!("Detectar: Auto (JSON, XML, var_dump)", "Detect: Auto (JSON, XML, var_dump)"));
 
         // 4. Inspector controls
         imp.btn_paste_inspector.set_tooltip_text(Some(tr!("Pegar", "Paste")));
@@ -1310,7 +1265,12 @@ impl VarDiffWindow {
             imp.lbl_diff_similarity.set_label(&format!("100% {}", tr!("similitud", "similarity")));
             imp.lbl_diff_removals.set_label(&format!("0 {}", tr!("supresiones (-)", "deletions (-)")));
             imp.lbl_diff_additions.set_label(&format!("0 {}", tr!("adiciones (+)", "additions (+)")));
-            imp.lbl_footer_diff_badge.set_label("+0  -0");
+            imp.lbl_diff_sync.set_label(tr!("↻ Diferencias sincronizadas", "↻ Differences synchronized"));
+            imp.lbl_diff_encoding.set_label(&format!(
+                "UTF-8  •  {}  •  {}",
+                tr!("Texto", "Text"),
+                self_clr_diff.current_indent_style().label()
+            ));
             imp.hunk_positions.borrow_mut().clear();
             imp.last_unified_diff.borrow_mut().clear();
         });
@@ -1395,551 +1355,6 @@ impl VarDiffWindow {
             self_help.show_help_dialog();
         });
         self.add_action(&act_help);
-    }
-
-    fn update_inspector_metrics(&self) {
-        let imp = self.imp();
-        let buf = imp.source_inspector.buffer();
-        let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
-
-        if text.trim().is_empty() {
-            imp.lbl_syntax_valid.set_label(tr!("Listo", "Ready"));
-            imp.lbl_node_count.set_label(&format!("0 {}", tr!("nodos", "nodes")));
-            imp.lbl_payload_size.set_label("0 B");
-            imp.lbl_tree_stats.set_label(&format!(
-                "{}: 0 {} | 0 {}",
-                tr!("Árbol", "Tree"),
-                tr!("niveles", "levels"),
-                tr!("elementos", "items")
-            ));
-            imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
-            imp.lbl_inspector_status.set_tooltip_text(None);
-            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
-            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
-            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir a JSON", "Convert to JSON")));
-            return;
-        }
-
-        if imp.btn_mode_xml.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear XML (Ctrl+Shift+F)", "Format XML (Ctrl+Shift+F)")));
-            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar XML", "Minify XML")));
-            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir XML → JSON", "Convert XML → JSON")));
-
-            match analyze_xml(&text) {
-                Ok(metrics) => {
-                    if imp.lbl_inspector_status.label().as_str().starts_with("Error:") {
-                        imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
-                        imp.lbl_inspector_status.set_tooltip_text(None);
-                    }
-
-                    imp.lbl_syntax_valid.set_label(tr!("✓ XML Válido", "✓ Valid XML"));
-                    imp.lbl_syntax_valid.remove_css_class("badge-error");
-                    imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                    imp.lbl_rfc_badge.set_label(tr!("Válido W3C XML", "W3C XML Valid"));
-                    imp.lbl_rfc_badge.remove_css_class("badge-error");
-                    imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                    imp.lbl_node_count
-                        .set_label(&format!("{} {}", metrics.total_elements, tr!("elementos", "elements")));
-                    imp.lbl_payload_size.set_label(&metrics.formatted_size());
-                    imp.lbl_tree_stats.set_label(&format!(
-                        "{}: {} {} | {} {}",
-                        tr!("Árbol XML", "XML Tree"),
-                        metrics.max_depth,
-                        tr!("niveles", "levels"),
-                        metrics.total_attributes,
-                        tr!("atributos", "attributes")
-                    ));
-                }
-                Err(err_msg) => {
-                    imp.lbl_syntax_valid.set_label(tr!("✗ XML Inválido", "✗ Invalid XML"));
-                    imp.lbl_syntax_valid.remove_css_class("badge-success");
-                    imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                    imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                    imp.lbl_rfc_badge.remove_css_class("badge-success");
-                    imp.lbl_rfc_badge.add_css_class("badge-error");
-
-                    imp.lbl_inspector_status.set_label(&err_msg);
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err_msg));
-                }
-            }
-            if imp.btn_insp_view_tree.is_active() {
-                self.refresh_tree_view();
-            }
-            return;
-        }
-
-        if imp.btn_mode_raw.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
-            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
-            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir Array raw → JSON", "Convert Array raw → JSON")));
-
-            if parse_vardump(&text).is_ok() {
-                imp.lbl_syntax_valid.set_label(tr!("✓ Array raw Válido", "✓ Valid Array raw"));
-                imp.lbl_syntax_valid.remove_css_class("badge-error");
-                imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                imp.lbl_rfc_badge.set_label(tr!("print_r PHP Listo", "PHP print_r Ready"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                let kb = text.len() as f64 / 1024.0;
-                imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label(tr!(
-                    "Estructura PHP print_r / Array raw detectada",
-                    "PHP print_r / Array raw structure detected"
-                ));
-            } else {
-                imp.lbl_syntax_valid.set_label(tr!("✗ Array raw Inválido", "✗ Invalid Array raw"));
-                imp.lbl_syntax_valid.remove_css_class("badge-success");
-                imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
-            }
-            if imp.btn_insp_view_tree.is_active() {
-                self.refresh_tree_view();
-            }
-            return;
-        }
-
-        if imp.btn_mode_vardump.is_active() {
-            imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
-            imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
-            imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir var_dump → JSON", "Convert var_dump → JSON")));
-
-            if parse_vardump(&text).is_ok() {
-                imp.lbl_syntax_valid.set_label(tr!("✓ var_dump Válido", "✓ Valid var_dump"));
-                imp.lbl_syntax_valid.remove_css_class("badge-error");
-                imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                imp.lbl_rfc_badge.set_label(tr!("AST PHP Listo", "PHP AST Ready"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                let kb = text.len() as f64 / 1024.0;
-                imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label(tr!(
-                    "Estructura PHP var_dump detectada",
-                    "PHP var_dump structure detected"
-                ));
-            } else {
-                imp.lbl_syntax_valid.set_label(tr!("✗ var_dump Inválido", "✗ Invalid var_dump"));
-                imp.lbl_syntax_valid.remove_css_class("badge-success");
-                imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
-            }
-            if imp.btn_insp_view_tree.is_active() {
-                self.refresh_tree_view();
-            }
-            return;
-        }
-
-        match analyze_json(&text) {
-            Ok(metrics) => {
-                if imp.lbl_inspector_status.label().as_str().starts_with("Error:") {
-                    imp.lbl_inspector_status.set_label(tr!("Listo", "Ready"));
-                    imp.lbl_inspector_status.set_tooltip_text(None);
-                }
-
-                imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear JSON (Ctrl+Shift+F)", "Format JSON (Ctrl+Shift+F)")));
-                imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar JSON", "Minify JSON")));
-                imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir a JSON", "Convert to JSON")));
-
-                imp.lbl_syntax_valid.set_label(tr!("✓ Sintaxis Válida", "✓ Valid Syntax"));
-                imp.lbl_syntax_valid.remove_css_class("badge-error");
-                imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                imp.lbl_rfc_badge.set_label(tr!("Válido RFC 8259", "RFC 8259 Valid"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                imp.lbl_node_count
-                    .set_label(&format!("{} {}", metrics.total_nodes, tr!("nodos", "nodes")));
-                imp.lbl_payload_size.set_label(&metrics.formatted_size());
-                imp.lbl_tree_stats.set_label(&format!(
-                    "{}: {} {} | {} {}",
-                    tr!("Árbol", "Tree"),
-                    metrics.max_depth,
-                    tr!("niveles", "levels"),
-                    metrics.total_keys,
-                    tr!("claves", "keys")
-                ));
-            }
-            Err(err_loc) => {
-                // Auto-detection fallback when in JSON mode but content is XML or var_dump
-                if text.trim_start().starts_with('<') && analyze_xml(&text).is_ok() {
-                    Self::set_buffer_language(&buf, "xml");
-                    imp.btn_mode_xml.set_active(true);
-                    return;
-                }
-                if parse_vardump(&text).is_ok() {
-                    Self::set_buffer_language(&buf, "php");
-                    if is_printr_raw(&text) {
-                        imp.btn_mode_raw.set_active(true);
-                    } else {
-                        imp.btn_mode_vardump.set_active(true);
-                    }
-                    return;
-                }
-
-                imp.lbl_syntax_valid.set_label(tr!("✗ Sintaxis Inválida", "✗ Invalid Syntax"));
-                imp.lbl_syntax_valid.remove_css_class("badge-success");
-                imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                imp.lbl_rfc_badge.set_label(&err_loc);
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
-            }
-        }
-
-        if imp.btn_insp_view_tree.is_active() {
-            self.refresh_tree_view();
-        }
-    }
-
-    fn switch_to_tree_view(&self) {
-        let imp = self.imp();
-        imp.stack_inspector_view.set_visible_child_name("page_tree");
-        self.refresh_tree_view();
-    }
-
-    fn refresh_tree_view(&self) {
-        let imp = self.imp();
-        if let Some(tree_view) = imp.json_tree.get() {
-            let buf = imp.source_inspector.buffer();
-            let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
-
-            if text.trim().is_empty() {
-                return;
-            }
-
-            let parsed_json = if imp.btn_mode_json.is_active() {
-                serde_json::from_str::<serde_json::Value>(&text).ok()
-            } else if imp.btn_mode_vardump.is_active() || imp.btn_mode_raw.is_active() {
-                crate::core::vardump::parse_vardump(&text).ok()
-            } else if imp.btn_mode_xml.is_active() {
-                crate::core::xml::xml_to_json_string(&text, false)
-                    .ok()
-                    .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
-            } else {
-                serde_json::from_str::<serde_json::Value>(&text).ok()
-            };
-
-            if let Some(val) = parsed_json {
-                tree_view.load_json(&val);
-            }
-        }
-    }
-
-    fn handle_open_file(&self, force_left_diff: bool) {
-        let target = if force_left_diff {
-            FileTarget::DiffLeft
-        } else {
-            FileTarget::Active
-        };
-        self.handle_open_file_target(target);
-    }
-
-    fn handle_open_file_target(&self, target: FileTarget) {
-        let file_dialog = gtk4::FileDialog::builder()
-            .title(tr!("Abrir archivo", "Open file"))
-            .modal(true)
-            .build();
-
-        let self_clone = self.clone();
-        file_dialog.open(Some(self), gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                let filename = file
-                    .basename()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "archivo".to_string());
-
-                if let Ok((contents, _)) = file.load_contents(gio::Cancellable::NONE) {
-                    if let Ok(text) = String::from_utf8(contents.to_vec()) {
-                        let imp = self_clone.imp();
-                        match target {
-                            FileTarget::DiffLeft => {
-                                imp.source_diff_left.buffer().set_text(&text);
-                                imp.lbl_left_file.set_label(&filename);
-                                self_clone.handle_compute_diff();
-                            }
-                            FileTarget::DiffRight => {
-                                imp.source_diff_right.buffer().set_text(&text);
-                                imp.lbl_right_file.set_label(&filename);
-                                self_clone.handle_compute_diff();
-                            }
-                            FileTarget::Active => {
-                                let active = imp.main_stack.visible_child_name().unwrap_or_default();
-                                if active == "diff_page" {
-                                    let left_buf = imp.source_diff_left.buffer();
-                                    let right_buf = imp.source_diff_right.buffer();
-                                    if left_buf.char_count() == 0 {
-                                        left_buf.set_text(&text);
-                                        imp.lbl_left_file.set_label(&filename);
-                                    } else {
-                                        right_buf.set_text(&text);
-                                        imp.lbl_right_file.set_label(&filename);
-                                        self_clone.handle_compute_diff();
-                                    }
-                                } else {
-                                    if filename.ends_with(".xml") {
-                                        Self::set_buffer_language(&imp.source_inspector.buffer(), "xml");
-                                        imp.btn_mode_xml.set_active(true);
-                                    }
-                                    imp.source_inspector.buffer().set_text(&text);
-                                    imp.lbl_inspector_file.set_label(&filename);
-                                    imp.lbl_inspector_status.set_label(&format!(
-                                        "{}: {} {}",
-                                        tr!("Archivo cargado", "File loaded"),
-                                        count_lines(&text),
-                                        tr!("líneas", "lines")
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    fn clear_diff_highlights(&self) {
-        let imp = self.imp();
-        let left_buf = imp.source_diff_left.buffer();
-        let right_buf = imp.source_diff_right.buffer();
-
-        imp.source_diff_left.clear_diff_spans();
-        imp.source_diff_right.clear_diff_spans();
-
-        if let Some(tag_del) = imp.tag_deleted.get() {
-            left_buf.remove_tag(tag_del, &left_buf.start_iter(), &left_buf.end_iter());
-        }
-        if let Some(tag_sdel) = imp.tag_span_deleted.get() {
-            left_buf.remove_tag(tag_sdel, &left_buf.start_iter(), &left_buf.end_iter());
-        }
-        if let Some(tag_ins) = imp.tag_inserted.get() {
-            right_buf.remove_tag(tag_ins, &right_buf.start_iter(), &right_buf.end_iter());
-        }
-        if let Some(tag_sins) = imp.tag_span_inserted.get() {
-            right_buf.remove_tag(tag_sins, &right_buf.start_iter(), &right_buf.end_iter());
-        }
-    }
-
-    fn jump_diff_chunk(&self, next: bool) {
-        let imp = self.imp();
-        let hunks = imp.hunk_positions.borrow();
-        if hunks.is_empty() {
-            return;
-        }
-
-        let mut idx = imp.current_hunk_idx.get();
-        if next {
-            idx = (idx + 1) % hunks.len();
-        } else {
-            idx = if idx == 0 { hunks.len() - 1 } else { idx - 1 };
-        }
-        imp.current_hunk_idx.set(idx);
-
-        let (left_line, right_line) = hunks[idx];
-
-        let left_buf = imp.source_diff_left.buffer();
-        if let Some(mut iter) = left_buf.iter_at_line(left_line as i32) {
-            left_buf.place_cursor(&iter);
-            imp.source_diff_left
-                .scroll_to_iter(&mut iter, 0.2, false, 0.0, 0.5);
-        }
-
-        let right_buf = imp.source_diff_right.buffer();
-        if let Some(mut iter) = right_buf.iter_at_line(right_line as i32) {
-            right_buf.place_cursor(&iter);
-            imp.source_diff_right
-                .scroll_to_iter(&mut iter, 0.2, false, 0.0, 0.5);
-        }
-    }
-
-    fn schedule_diff_update(&self) {
-        let imp = self.imp();
-        if let Some(source_id) = imp.diff_debounce_source.borrow_mut().take() {
-            source_id.remove();
-        }
-
-        let self_clone = self.clone();
-        let new_source = glib::timeout_add_local_once(Duration::from_millis(150), move || {
-            self_clone.imp().diff_debounce_source.borrow_mut().take();
-            self_clone.handle_compute_diff();
-        });
-
-        *imp.diff_debounce_source.borrow_mut() = Some(new_source);
-    }
-
-    fn handle_compute_diff(&self) {
-        let imp = self.imp();
-        let left_buf = imp.source_diff_left.buffer();
-        let right_buf = imp.source_diff_right.buffer();
-
-        let left_text = left_buf
-            .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
-            .to_string();
-        let right_text = right_buf
-            .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
-            .to_string();
-
-        let ignore_ws = imp.sw_ignore_whitespace.is_active();
-        let patience = imp.pref_patience.is_active();
-        let total_lines = count_lines(&left_text) + count_lines(&right_text);
-
-        if total_lines > ASYNC_LINE_THRESHOLD {
-            imp.lbl_diff_count.set_label(tr!("Calculando...", "Calculating..."));
-            let handles = glib::thread_guard::ThreadGuard::new(self.clone());
-
-            thread::spawn(move || {
-                let summary = compute_diff_ext(&left_text, &right_text, patience, ignore_ws);
-                glib::idle_add_once(move || {
-                    handles
-                        .into_inner()
-                        .handle_worker_result(WorkerResult::DiffCalculated(summary));
-                });
-            });
-        } else {
-            let summary = compute_diff_ext(&left_text, &right_text, patience, ignore_ws);
-            self.apply_diff_summary(summary);
-        }
-    }
-
-    fn apply_diff_summary(&self, summary: DiffSummary) {
-        self.clear_diff_highlights();
-        let imp = self.imp();
-
-        let left_buf = imp.source_diff_left.buffer();
-        let right_buf = imp.source_diff_right.buffer();
-
-        // 1. Line-level highlights
-        if let Some(tag_del) = imp.tag_deleted.get() {
-            for h in &summary.left_highlights {
-                if let Some(start_iter) = left_buf.iter_at_line(h.line_index as i32) {
-                    let mut end_iter = start_iter;
-                    if !end_iter.ends_line() {
-                        end_iter.forward_to_line_end();
-                    }
-                    end_iter.forward_char();
-                    left_buf.apply_tag(tag_del, &start_iter, &end_iter);
-                }
-            }
-        }
-
-        if let Some(tag_ins) = imp.tag_inserted.get() {
-            for h in &summary.right_highlights {
-                if let Some(start_iter) = right_buf.iter_at_line(h.line_index as i32) {
-                    let mut end_iter = start_iter;
-                    if !end_iter.ends_line() {
-                        end_iter.forward_to_line_end();
-                    }
-                    end_iter.forward_char();
-                    right_buf.apply_tag(tag_ins, &start_iter, &end_iter);
-                }
-            }
-        }
-
-        // 2. Inline word/token-level highlights & vertical accent stripes
-        let left_marks: Vec<crate::ui::diff_editor::DiffLineMark> = summary
-            .left_highlights
-            .iter()
-            .map(|h| crate::ui::diff_editor::DiffLineMark {
-                line: h.line_index as i32,
-                is_deletion: true,
-            })
-            .collect();
-        imp.source_diff_left.set_diff_line_marks(left_marks);
-
-        let right_marks: Vec<crate::ui::diff_editor::DiffLineMark> = summary
-            .right_highlights
-            .iter()
-            .map(|h| crate::ui::diff_editor::DiffLineMark {
-                line: h.line_index as i32,
-                is_deletion: false,
-            })
-            .collect();
-        imp.source_diff_right.set_diff_line_marks(right_marks);
-
-        let left_diff_spans: Vec<crate::ui::diff_editor::DiffSpan> = summary
-            .left_spans
-            .iter()
-            .map(|s| crate::ui::diff_editor::DiffSpan {
-                line: s.line_index as i32,
-                start_char: s.start_char as i32,
-                end_char: s.end_char as i32,
-                is_deletion: true,
-            })
-            .collect();
-        imp.source_diff_left.set_diff_spans(left_diff_spans);
-
-        let right_diff_spans: Vec<crate::ui::diff_editor::DiffSpan> = summary
-            .right_spans
-            .iter()
-            .map(|s| crate::ui::diff_editor::DiffSpan {
-                line: s.line_index as i32,
-                start_char: s.start_char as i32,
-                end_char: s.end_char as i32,
-                is_deletion: false,
-            })
-            .collect();
-        imp.source_diff_right.set_diff_spans(right_diff_spans);
-
-        if let Some(tag_sdel) = imp.tag_span_deleted.get() {
-            for s in &summary.left_spans {
-                if let (Some(start_iter), Some(end_iter)) = (
-                    left_buf.iter_at_line_offset(s.line_index as i32, s.start_char as i32),
-                    left_buf.iter_at_line_offset(s.line_index as i32, s.end_char as i32),
-                ) {
-                    left_buf.apply_tag(tag_sdel, &start_iter, &end_iter);
-                }
-            }
-        }
-
-        if let Some(tag_sins) = imp.tag_span_inserted.get() {
-            for s in &summary.right_spans {
-                if let (Some(start_iter), Some(end_iter)) = (
-                    right_buf.iter_at_line_offset(s.line_index as i32, s.start_char as i32),
-                    right_buf.iter_at_line_offset(s.line_index as i32, s.end_char as i32),
-                ) {
-                    right_buf.apply_tag(tag_sins, &start_iter, &end_iter);
-                }
-            }
-        }
-
-        let count_label = if summary.hunk_count == 0 {
-            tr!("Sin diferencias", "No differences").to_string()
-        } else if summary.hunk_count == 1 {
-            tr!("1 diferencia encontrada", "1 difference found").to_string()
-        } else {
-            format!("{} {}", summary.hunk_count, tr!("diferencias encontradas", "differences found"))
-        };
-        imp.lbl_diff_count.set_label(&count_label);
-
-        let sim_pct = (summary.similarity_ratio * 100.0).round() as u32;
-        imp.lbl_diff_similarity.set_label(&format!(
-            "{}% {}",
-            sim_pct,
-            tr!("similitud", "similarity")
-        ));
-
-        imp.lbl_diff_removals
-            .set_label(&format!("{} {}", summary.deletions, tr!("supresiones (-)", "deletions (-)")));
-        imp.lbl_diff_additions
-            .set_label(&format!("{} {}", summary.insertions, tr!("adiciones (+)", "additions (+)")));
-        imp.lbl_footer_diff_badge
-            .set_label(&format!("+{}  -{}", summary.insertions, summary.deletions));
-
-        imp.hunk_positions.replace(summary.hunk_positions);
-        imp.last_unified_diff.replace(summary.unified_diff);
-        imp.current_hunk_idx.set(0);
     }
 
     fn handle_load_demo(&self) {
@@ -2059,537 +1474,33 @@ impl VarDiffWindow {
         }
     }
 
-    fn setup_code_search(&self) {
-        let imp = self.imp();
-        let Some(sbuf) = imp
-            .source_inspector
-            .buffer()
-            .downcast::<sourceview5::Buffer>()
-            .ok()
-        else {
-            return;
-        };
-
-        let settings = sourceview5::SearchSettings::new();
-        settings.set_case_sensitive(false);
-        settings.set_wrap_around(true);
-
-        let context = sourceview5::SearchContext::new(&sbuf, Some(&settings));
-        context.set_highlight(true);
-        imp.search_context.set(context.clone()).ok();
-
-        let view = imp.source_inspector.get();
-        let view_changed = view.clone();
-        let ctx_changed = context.clone();
-        let settings_changed = settings.clone();
-        imp.entry_search_inspector
-            .connect_search_changed(move |entry| {
-                let query = entry.text();
-                if query.is_empty() {
-                    settings_changed.set_search_text(None);
-                    return;
-                }
-                settings_changed.set_search_text(Some(query.as_str()));
-                let buf = view_changed.buffer();
-                let start = buf.start_iter();
-                if let Some((match_start, match_end, _)) = ctx_changed.forward(&start) {
-                    buf.select_range(&match_start, &match_end);
-                    let mut scroll_iter = match_start;
-                    view_changed.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
-                }
-            });
-
-        let view_act = view.clone();
-        let ctx_act = context.clone();
-        imp.entry_search_inspector.connect_activate(move |_| {
-            let buf = view_act.buffer();
-            let cursor = if let Some((_, sel_end)) = buf.selection_bounds() {
-                sel_end
-            } else {
-                buf.iter_at_offset(buf.cursor_position())
-            };
-            if let Some((match_start, match_end, _)) = ctx_act.forward(&cursor) {
-                buf.select_range(&match_start, &match_end);
-                let mut scroll_iter = match_start;
-                view_act.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
-            }
-        });
-
-        let view_next = view.clone();
-        let ctx_next = context.clone();
-        imp.entry_search_inspector.connect_next_match(move |_| {
-            let buf = view_next.buffer();
-            let cursor = if let Some((_, sel_end)) = buf.selection_bounds() {
-                sel_end
-            } else {
-                buf.iter_at_offset(buf.cursor_position())
-            };
-            if let Some((match_start, match_end, _)) = ctx_next.forward(&cursor) {
-                buf.select_range(&match_start, &match_end);
-                let mut scroll_iter = match_start;
-                view_next.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
-            }
-        });
-
-        let view_prev = view;
-        let ctx_prev = context;
-        imp.entry_search_inspector.connect_previous_match(move |_| {
-            let buf = view_prev.buffer();
-            let cursor = if let Some((sel_start, _)) = buf.selection_bounds() {
-                sel_start
-            } else {
-                buf.iter_at_offset(buf.cursor_position())
-            };
-            if let Some((match_start, match_end, _)) = ctx_prev.backward(&cursor) {
-                buf.select_range(&match_start, &match_end);
-                let mut scroll_iter = match_start;
-                view_prev.scroll_to_iter(&mut scroll_iter, 0.2, false, 0.0, 0.5);
-            }
-        });
-    }
-
-    fn setup_drag_and_drop(&self) {
-        let imp = self.imp();
-
-        let attach_drop = |widget: &gtk4::Widget, win: Self, target: FileTarget| {
-            let drop_target =
-                gtk4::DropTarget::new(gio::File::static_type(), gdk::DragAction::COPY);
-            drop_target.connect_drop(move |_, value, _, _| {
-                if let Ok(file) = value.get::<gio::File>() {
-                    win.load_gio_file(&file, target);
-                    return true;
-                }
-                false
-            });
-            widget.add_controller(drop_target);
-        };
-
-        attach_drop(
-            imp.source_inspector.upcast_ref::<gtk4::Widget>(),
-            self.clone(),
-            FileTarget::Active,
-        );
-        attach_drop(
-            imp.source_diff_left.upcast_ref::<gtk4::Widget>(),
-            self.clone(),
-            FileTarget::DiffLeft,
-        );
-        attach_drop(
-            imp.source_diff_right.upcast_ref::<gtk4::Widget>(),
-            self.clone(),
-            FileTarget::DiffRight,
-        );
-    }
-
-    fn load_gio_file(&self, file: &gio::File, target: FileTarget) {
-        let filename = file
-            .basename()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| tr!("archivo", "file").to_string());
-
-        if let Ok((contents, _)) = file.load_contents(gio::Cancellable::NONE) {
-            if let Ok(text) = String::from_utf8(contents.to_vec()) {
-                let imp = self.imp();
-                match target {
-                    FileTarget::DiffLeft => {
-                        imp.source_diff_left.buffer().set_text(&text);
-                        imp.lbl_left_file.set_label(&filename);
-                        self.handle_compute_diff();
-                    }
-                    FileTarget::DiffRight => {
-                        imp.source_diff_right.buffer().set_text(&text);
-                        imp.lbl_right_file.set_label(&filename);
-                        self.handle_compute_diff();
-                    }
-                    FileTarget::Active => {
-                        let active = imp.main_stack.visible_child_name().unwrap_or_default();
-                        if active == "diff_page" {
-                            let left_buf = imp.source_diff_left.buffer();
-                            let right_buf = imp.source_diff_right.buffer();
-                            if left_buf.char_count() == 0 {
-                                left_buf.set_text(&text);
-                                imp.lbl_left_file.set_label(&filename);
-                            } else {
-                                right_buf.set_text(&text);
-                                imp.lbl_right_file.set_label(&filename);
-                                self.handle_compute_diff();
-                            }
-                        } else {
-                            if filename.ends_with(".xml") {
-                                Self::set_buffer_language(&imp.source_inspector.buffer(), "xml");
-                                imp.btn_mode_xml.set_active(true);
-                            }
-                            imp.source_inspector.buffer().set_text(&text);
-                            imp.lbl_inspector_file.set_label(&filename);
-                            imp.lbl_inspector_status.set_label(&format!(
-                                "{}: {} {}",
-                                tr!("Archivo cargado", "File loaded"),
-                                count_lines(&text),
-                                tr!("líneas", "lines")
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn handle_save_file(&self) {
-        let imp = self.imp();
-        let active = imp.main_stack.visible_child_name().unwrap_or_default();
-        let (text, default_name) = if active == "diff_page" {
-            let right_buf = imp.source_diff_right.buffer();
-            let r_text = right_buf
-                .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
-                .to_string();
-            if !r_text.trim().is_empty() {
-                (r_text, "modified.json")
-            } else {
-                let left_buf = imp.source_diff_left.buffer();
-                (
-                    left_buf
-                        .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
-                        .to_string(),
-                    "original.json",
-                )
-            }
-        } else {
-            let buf = imp.source_inspector.buffer();
-            let ext = if imp.btn_mode_xml.is_active() {
-                "payload.xml"
-            } else {
-                "payload.json"
-            };
-            (
-                buf.text(&buf.start_iter(), &buf.end_iter(), true)
-                    .to_string(),
-                ext,
-            )
-        };
-
-        if text.trim().is_empty() {
-            imp.lbl_inspector_status
-                .set_label(tr!("El editor está vacío", "Editor is empty"));
-            return;
-        }
-
-        let file_dialog = gtk4::FileDialog::builder()
-            .title(tr!("Guardar archivo", "Save file"))
-            .initial_name(default_name)
-            .modal(true)
-            .build();
-
-        let self_clone = self.clone();
-        file_dialog.save(Some(self), gio::Cancellable::NONE, move |result| {
-            if let Ok(file) = result {
-                if let Some(path) = file.path() {
-                    if std::fs::write(&path, &text).is_ok() {
-                        let filename = file
-                            .basename()
-                            .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_default();
-                        let imp = self_clone.imp();
-                        imp.lbl_inspector_file.set_label(&filename);
-                        imp.lbl_inspector_status.set_label(&format!(
-                            "{}: {}",
-                            tr!("Guardado", "Saved"),
-                            filename
-                        ));
-                    }
-                }
-            }
-        });
-    }
-
-    fn normalize_single_payload(text: &str, indent: IndentStyle) -> Option<String> {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        if let Ok(sorted_json) = sort_json_keys(trimmed, indent) {
-            return Some(sorted_json);
-        }
-        if trimmed.starts_with('<') {
-            if let Ok(fmt_xml) = format_xml_with_indent(trimmed, true, indent) {
-                return Some(fmt_xml);
-            }
-        }
-        if let Ok(vd_json) = vardump_to_json_string(trimmed, true) {
-            if let Ok(sorted) = sort_json_keys(&vd_json, indent) {
-                return Some(sorted);
-            }
-            return Some(vd_json);
-        }
-        None
-    }
-
-    fn handle_normalize_diff(&self) {
-        let imp = self.imp();
-        let indent = self.current_indent_style();
-        let left_buf = imp.source_diff_left.buffer();
-        let right_buf = imp.source_diff_right.buffer();
-
-        let left_text = left_buf
-            .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
-            .to_string();
-        let right_text = right_buf
-            .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
-            .to_string();
-
-        if let Some(norm_l) = Self::normalize_single_payload(&left_text, indent) {
-            left_buf.set_text(&norm_l);
-        }
-        if let Some(norm_r) = Self::normalize_single_payload(&right_text, indent) {
-            right_buf.set_text(&norm_r);
-        }
-        self.handle_compute_diff();
-    }
-
-    fn handle_sort_json_keys(&self) {
-        let imp = self.imp();
-        let buf = imp.source_inspector.buffer();
-        let text = buf
-            .text(&buf.start_iter(), &buf.end_iter(), true)
-            .to_string();
-        if text.trim().is_empty() {
-            imp.lbl_inspector_status
-                .set_label(tr!("El editor está vacío", "Editor is empty"));
-            return;
-        }
-
-        let indent = self.current_indent_style();
-        match sort_json_keys(&text, indent) {
-            Ok(sorted) => {
-                buf.set_text(&sorted);
-                Self::set_buffer_language(&buf, "json");
-                imp.btn_mode_json.set_active(true);
-                imp.lbl_inspector_status.set_label(tr!(
-                    "Claves JSON ordenadas alfabéticamente (A→Z)",
-                    "JSON keys sorted alphabetically (A→Z)"
-                ));
-                imp.lbl_inspector_status.set_tooltip_text(None);
-            }
-            Err(err) => {
-                imp.lbl_inspector_status
-                    .set_label(&format!("Error: {}", err));
-                imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-            }
-        }
-    }
-
-    fn handle_json_format(&self, pretty: bool) {
-        let imp = self.imp();
-        let buf = imp.source_inspector.buffer();
-        let text = buf
-            .text(&buf.start_iter(), &buf.end_iter(), true)
-            .to_string();
-        let lines = count_lines(&text);
-        let indent = self.current_indent_style();
-
-        if text.trim().is_empty() {
-            imp.lbl_inspector_status
-                .set_label(tr!("El editor está vacío", "Editor is empty"));
-            return;
-        }
-
-        let is_xml = imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<');
-
-        let action_name = if is_xml {
-            if pretty {
-                tr!("Formateando XML", "Formatting XML")
-            } else {
-                tr!("Minificando XML", "Minifying XML")
-            }
-        } else if pretty {
-            tr!("Formateando JSON", "Formatting JSON")
-        } else {
-            tr!("Minificando JSON", "Minifying JSON")
-        };
-
-        if lines > ASYNC_LINE_THRESHOLD {
-            imp.lbl_inspector_status.set_label(&format!(
-                "{} ({} {})...",
-                action_name,
-                lines,
-                tr!("líneas", "lines")
-            ));
-            let handles = glib::thread_guard::ThreadGuard::new(self.clone());
-
-            thread::spawn(move || {
-                let res = if is_xml {
-                    match format_xml_with_indent(&text, pretty, indent) {
-                        Ok(formatted) => WorkerResult::InspectorFormatted {
-                            text: formatted,
-                            message: if pretty {
-                                tr!("XML formateado correctamente", "XML formatted successfully")
-                                    .to_string()
-                            } else {
-                                tr!("XML minificado correctamente", "XML minified successfully")
-                                    .to_string()
-                            },
-                            is_xml: true,
-                        },
-                        Err(e) => WorkerResult::Error(e),
-                    }
-                } else {
-                    match format_json_with_indent(&text, pretty, indent) {
-                        Ok(formatted) => WorkerResult::InspectorFormatted {
-                            text: formatted,
-                            message: if pretty {
-                                tr!("JSON formateado correctamente", "JSON formatted successfully")
-                                    .to_string()
-                            } else {
-                                tr!("JSON minificado correctamente", "JSON minified successfully")
-                                    .to_string()
-                            },
-                            is_xml: false,
-                        },
-                        Err(e) => WorkerResult::Error(e),
-                    }
-                };
-                glib::idle_add_once(move || {
-                    handles.into_inner().handle_worker_result(res);
-                });
-            });
-        } else if is_xml {
-            match format_xml_with_indent(&text, pretty, indent) {
-                Ok(formatted) => {
-                    buf.set_text(&formatted);
-                    Self::set_buffer_language(&buf, "xml");
-                    imp.btn_mode_xml.set_active(true);
-                    imp.lbl_inspector_status.set_label(if pretty {
-                        tr!("XML formateado", "XML formatted")
-                    } else {
-                        tr!("XML minificado", "XML minified")
-                    });
-                    imp.lbl_inspector_status.set_tooltip_text(None);
-                }
-                Err(err) => {
-                    imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                }
-            }
-        } else {
-            match format_json_with_indent(&text, pretty, indent) {
-                Ok(formatted) => {
-                    buf.set_text(&formatted);
-                    Self::set_buffer_language(&buf, "json");
-                    imp.btn_mode_json.set_active(true);
-                    imp.lbl_inspector_status.set_label(if pretty {
-                        tr!("JSON formateado", "JSON formatted")
-                    } else {
-                        tr!("JSON minificado", "JSON minified")
-                    });
-                    imp.lbl_inspector_status.set_tooltip_text(None);
-                }
-                Err(err) => {
-                    imp.lbl_inspector_status
-                        .set_label(&format!("Error: {}", err));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                }
-            }
-        }
-    }
-
-    fn handle_vardump_convert(&self) {
-        let imp = self.imp();
-        let buf = imp.source_inspector.buffer();
-        let text = buf
-            .text(&buf.start_iter(), &buf.end_iter(), true)
-            .to_string();
-        let lines = count_lines(&text);
-
-        if text.trim().is_empty() {
-            imp.lbl_inspector_status.set_label(tr!("El editor está vacío", "Editor is empty"));
-            imp.lbl_inspector_status.set_tooltip_text(None);
-            return;
-        }
-
-        // Si es XML, convertir XML a JSON
-        if imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<') {
-            match xml_to_json_string(&text, true) {
-                Ok(json_str) => {
-                    buf.set_text(&json_str);
-                    Self::set_buffer_language(&buf, "json");
-                    imp.btn_mode_json.set_active(true);
-                    imp.lbl_inspector_status
-                        .set_label(tr!("XML transformado exitosamente a JSON", "XML successfully converted to JSON"));
-                    imp.lbl_inspector_status.set_tooltip_text(None);
-                }
-                Err(err) => {
-                    imp.lbl_inspector_status
-                        .set_label(tr!("Error: No es un XML válido para convertir a JSON", "Error: Not a valid XML to convert to JSON"));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                }
-            }
-            return;
-        }
-
-        // Si ya es un JSON válido, informar amablemente al usuario
-        if serde_json::from_str::<serde_json::Value>(&text).is_ok() {
-            imp.lbl_inspector_status
-                .set_label(tr!("El contenido ya es JSON válido (no requiere conversión)", "Content is already valid JSON (no conversion needed)"));
-            imp.lbl_inspector_status.set_tooltip_text(None);
-            return;
-        }
-
-        let is_raw = imp.btn_mode_raw.is_active();
-        let mode_label = if is_raw { "Array raw" } else { "var_dump" };
-
-        if lines > ASYNC_LINE_THRESHOLD {
-            imp.lbl_inspector_status
-                .set_label(&format!("{} {} ({} {})...", tr!("Parseando", "Parsing"), mode_label, lines, tr!("líneas", "lines")));
-            imp.lbl_inspector_status.set_tooltip_text(None);
-            let handles = glib::thread_guard::ThreadGuard::new(self.clone());
-
-            thread::spawn(move || {
-                let res = match vardump_to_json_string(&text, true) {
-                    Ok(json_str) => WorkerResult::InspectorFormatted {
-                        text: json_str,
-                        message: format!("{} {}", mode_label, tr!("transformado exitosamente a JSON", "successfully converted to JSON")),
-                        is_xml: false,
-                    },
-                    Err(e) => WorkerResult::Error(e),
-                };
-                glib::idle_add_once(move || {
-                    handles.into_inner().handle_worker_result(res);
-                });
-            });
-        } else {
-            match vardump_to_json_string(&text, true) {
-                Ok(json_str) => {
-                    buf.set_text(&json_str);
-                    Self::set_buffer_language(&buf, "json");
-                    imp.btn_mode_json.set_active(true);
-                    imp.lbl_inspector_status
-                        .set_label(&format!("{} {}", mode_label, tr!("convertido a JSON", "converted to JSON")));
-                    imp.lbl_inspector_status.set_tooltip_text(None);
-                }
-                Err(err) => {
-                    imp.lbl_inspector_status
-                        .set_label(&format!("Error: {} PHP {} {}", tr!("No es una estructura", "Not a valid"), mode_label, tr!("válida", "structure")));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                }
-            }
-        }
-    }
-
     fn handle_worker_result(&self, result: WorkerResult) {
         let imp = self.imp();
         match result {
             WorkerResult::InspectorFormatted {
                 text,
                 message,
-                is_xml,
+                mode,
             } => {
                 let buf = imp.source_inspector.buffer();
                 buf.set_text(&text);
-                if is_xml {
-                    Self::set_buffer_language(&buf, "xml");
-                    imp.btn_mode_xml.set_active(true);
-                } else {
-                    Self::set_buffer_language(&buf, "json");
-                    imp.btn_mode_json.set_active(true);
+                match mode {
+                    InspectorFormatMode::Xml => {
+                        Self::set_buffer_language(&buf, "xml");
+                        imp.btn_mode_xml.set_active(true);
+                    }
+                    InspectorFormatMode::PhpVarDump => {
+                        Self::set_buffer_language(&buf, "php");
+                        imp.btn_mode_vardump.set_active(true);
+                    }
+                    InspectorFormatMode::PhpRaw => {
+                        Self::set_buffer_language(&buf, "php");
+                        imp.btn_mode_raw.set_active(true);
+                    }
+                    InspectorFormatMode::Json => {
+                        Self::set_buffer_language(&buf, "json");
+                        imp.btn_mode_json.set_active(true);
+                    }
                 }
                 imp.lbl_inspector_status.set_label(&message);
                 imp.lbl_inspector_status.set_tooltip_text(None);

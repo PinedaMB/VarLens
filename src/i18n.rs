@@ -40,17 +40,34 @@ impl Language {
 
 static CURRENT_LANG: AtomicU8 = AtomicU8::new(0);
 
+/// Detects the user's system language using GLib/POSIX locale priority (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`).
+pub fn detect_system_language() -> Language {
+    for name in glib::language_names() {
+        let lower = name.to_lowercase();
+        if lower.starts_with("es") {
+            return Language::Spanish;
+        }
+        if lower.starts_with("en") {
+            return Language::English;
+        }
+    }
+    Language::English
+}
+
 pub fn init() {
     if let Some(lang) = load_saved_language() {
         set_language_internal(lang);
-    } else if let Ok(lang_env) = std::env::var("LANG") {
-        if lang_env.starts_with("es") {
-            set_language_internal(Language::Spanish);
-        } else {
-            set_language_internal(Language::English);
-        }
     } else {
-        set_language_internal(Language::Spanish);
+        set_language_internal(detect_system_language());
+    }
+}
+
+/// Returns `0` for Auto (System), `1` for Spanish, `2` for English.
+pub fn saved_preference_index() -> u32 {
+    match load_saved_language() {
+        None => 0,
+        Some(Language::Spanish) => 1,
+        Some(Language::English) => 2,
     }
 }
 
@@ -64,7 +81,12 @@ fn set_language_internal(lang: Language) {
 
 pub fn set_language(lang: Language) {
     set_language_internal(lang);
-    save_language(lang);
+    save_language_str(lang.code());
+}
+
+pub fn set_language_auto() {
+    set_language_internal(detect_system_language());
+    save_language_str("auto");
 }
 
 fn config_path() -> std::path::PathBuf {
@@ -84,12 +106,12 @@ fn load_saved_language() -> Option<Language> {
     None
 }
 
-fn save_language(lang: Language) {
+fn save_language_str(val: &str) {
     let path = config_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(path, lang.code());
+    let _ = std::fs::write(path, val);
 }
 
 /// Returns either the Spanish or English text according to the active language.
@@ -114,15 +136,15 @@ mod tests {
 
     #[test]
     fn test_language_switch_and_tr() {
-        set_language(Language::Spanish);
+        let prev = current_language();
+        set_language_internal(Language::Spanish);
         assert_eq!(current_language(), Language::Spanish);
         assert_eq!(tr!("Hola", "Hello"), "Hola");
 
-        set_language(Language::English);
+        set_language_internal(Language::English);
         assert_eq!(current_language(), Language::English);
         assert_eq!(tr!("Hola", "Hello"), "Hello");
 
-        // Restore to Spanish
-        set_language(Language::Spanish);
+        set_language_internal(prev);
     }
 }

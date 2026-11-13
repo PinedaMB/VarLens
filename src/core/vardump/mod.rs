@@ -1,6 +1,7 @@
 pub mod parser;
 
 use parser::{Rule, VarDumpParser};
+use crate::core::json::IndentStyle;
 use pest::iterators::Pair;
 use pest::Parser;
 use serde_json::{Map, Number, Value};
@@ -431,11 +432,15 @@ fn parse_varexport_key(pair: Pair<Rule>) -> (Option<i64>, String) {
     }
 }
 
-/// Parses a PHP `var_dump()` or `print_r()` output string into a `serde_json::Value`.
+/// Parses a PHP `var_dump()`, `print_r()`, `var_export`, or `serialize()` output string into a `serde_json::Value`.
 pub fn parse_vardump(input: &str) -> Result<Value, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err("El contenido de var_dump está vacío.".to_string());
+    }
+
+    if crate::core::php_serialize::is_php_serialized(trimmed) {
+        return crate::core::php_serialize::parse_php_serialized(trimmed);
     }
 
     let mut pairs = VarDumpParser::parse(Rule::root, trimmed)
@@ -484,6 +489,430 @@ pub fn vardump_to_json_string(input: &str, pretty: bool) -> Result<String, Strin
     } else {
         serde_json::to_string(&val)
             .map_err(|e| format!("Error al serializar a JSON: {}", e))
+    }
+}
+
+/// Formats a PHP `var_dump()`, `print_r()`, or `var_export`/raw array string in its own native PHP format.
+pub fn format_vardump_with_indent(
+    input: &str,
+    pretty: bool,
+    indent: IndentStyle,
+) -> Result<String, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("El contenido de var_dump está vacío.".to_string());
+    }
+
+    if crate::core::php_serialize::is_php_serialized(trimmed) {
+        crate::core::php_serialize::parse_php_serialized(trimmed)?;
+        return Ok(trimmed.to_string());
+    }
+
+    let mut pairs = VarDumpParser::parse(Rule::root, trimmed)
+        .map_err(|err| format!("Error sintáctico al parsear PHP:\n{}", err))?;
+
+    let root_pair = pairs
+        .next()
+        .ok_or_else(|| "Entrada de PHP no produjo tokens.".to_string())?;
+
+    let unit = std::str::from_utf8(indent.as_bytes()).unwrap_or("  ");
+    let mut out = String::new();
+
+    for inner in root_pair.into_inner() {
+        match inner.as_rule() {
+            Rule::xdebug_header => {
+                out.push_str(inner.as_str().trim_end());
+                out.push('\n');
+            }
+            Rule::value => {
+                format_value_pair(inner, pretty, unit, 0, &mut out);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(out)
+}
+
+fn push_indent(out: &mut String, unit: &str, depth: usize) {
+    for _ in 0..depth {
+        out.push_str(unit);
+    }
+}
+
+fn format_value_pair(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    for child in pair.into_inner() {
+        match child.as_rule() {
+            Rule::reference => out.push('&'),
+            Rule::null_val => out.push_str("NULL"),
+            Rule::bool_val | Rule::int_val | Rule::float_val | Rule::resource_val | Rule::recursion_val | Rule::uninitialized_val => {
+                out.push_str(child.as_str().trim());
+            }
+            Rule::string_val => {
+                let mut len = "";
+                let mut qs = "";
+                for p in child.into_inner() {
+                    match p.as_rule() {
+                        Rule::length => len = p.as_str(),
+                        Rule::quoted_string => qs = p.as_str(),
+                        _ => {}
+                    }
+                }
+                out.push_str(&format!("string({}) {}", len, qs));
+            }
+            Rule::array_val => format_array_val(child, pretty, unit, depth, out),
+            Rule::object_val => format_object_val(child, pretty, unit, depth, out),
+            Rule::printr_array | Rule::printr_object => {
+                format_printr_container(child, pretty, unit, depth, out);
+            }
+            Rule::varexport_array => format_varexport_array(child, pretty, unit, depth, out),
+            Rule::varexport_object => format_varexport_object(child, pretty, unit, depth, out),
+            _ => out.push_str(child.as_str().trim()),
+        }
+    }
+}
+
+fn format_array_val(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    let mut len = "0";
+    let mut entries = Vec::new();
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::length => len = p.as_str(),
+            Rule::array_entry => entries.push(p),
+            _ => {}
+        }
+    }
+
+    if entries.is_empty() {
+        out.push_str(&format!("array({}) {{}}", len));
+        return;
+    }
+
+    out.push_str(&format!("array({}) {{", len));
+    if pretty {
+        out.push('\n');
+    } else {
+        out.push(' ');
+    }
+
+    for (idx, entry) in entries.into_iter().enumerate() {
+        let mut key_str = "";
+        let mut val_pair = None;
+        for ep in entry.into_inner() {
+            match ep.as_rule() {
+                Rule::key => key_str = ep.as_str().trim(),
+                Rule::value => val_pair = Some(ep),
+                _ => {}
+            }
+        }
+        if pretty {
+            push_indent(out, unit, depth + 1);
+            out.push_str(&format!("[{}]=>\n", key_str));
+            push_indent(out, unit, depth + 1);
+        } else {
+            if idx > 0 {
+                out.push(' ');
+            }
+            out.push_str(&format!("[{}]=> ", key_str));
+        }
+        if let Some(vp) = val_pair {
+            format_value_pair(vp, pretty, unit, depth + 1, out);
+        }
+        if pretty {
+            out.push('\n');
+        }
+    }
+
+    if pretty {
+        push_indent(out, unit, depth);
+    } else {
+        out.push(' ');
+    }
+    out.push('}');
+}
+
+fn format_object_val(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    let mut class_name = "";
+    let mut obj_id = "";
+    let mut len: Option<&str> = None;
+    let mut entries = Vec::new();
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::class_name => class_name = p.as_str(),
+            Rule::object_id => obj_id = p.as_str(),
+            Rule::length => len = Some(p.as_str()),
+            Rule::object_entry => entries.push(p),
+            _ => {}
+        }
+    }
+
+    if let Some(l) = len {
+        out.push_str(&format!("object({})#{} ({}) {{", class_name, obj_id, l));
+    } else {
+        out.push_str(&format!("object({})#{} {{", class_name, obj_id));
+    }
+
+    if entries.is_empty() {
+        out.push('}');
+        return;
+    }
+
+    if pretty {
+        out.push('\n');
+    } else {
+        out.push(' ');
+    }
+
+    for (idx, entry) in entries.into_iter().enumerate() {
+        let mut key_str = "";
+        let mut val_pair = None;
+        for ep in entry.into_inner() {
+            match ep.as_rule() {
+                Rule::object_key => key_str = ep.as_str().trim(),
+                Rule::value => val_pair = Some(ep),
+                _ => {}
+            }
+        }
+        if pretty {
+            push_indent(out, unit, depth + 1);
+            out.push_str(&format!("[{}]=>\n", key_str));
+            push_indent(out, unit, depth + 1);
+        } else {
+            if idx > 0 {
+                out.push(' ');
+            }
+            out.push_str(&format!("[{}]=> ", key_str));
+        }
+        if let Some(vp) = val_pair {
+            format_value_pair(vp, pretty, unit, depth + 1, out);
+        }
+        if pretty {
+            out.push('\n');
+        }
+    }
+
+    if pretty {
+        push_indent(out, unit, depth);
+    } else {
+        out.push(' ');
+    }
+    out.push('}');
+}
+
+fn format_printr_container(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    let is_object = pair.as_rule() == Rule::printr_object;
+    let mut class_name = "";
+    let mut entries = Vec::new();
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::class_name => class_name = p.as_str(),
+            Rule::printr_entry => entries.push(p),
+            _ => {}
+        }
+    }
+
+    if is_object {
+        out.push_str(&format!("{} Object\n", class_name));
+    } else {
+        out.push_str("Array\n");
+    }
+
+    if pretty {
+        push_indent(out, unit, depth);
+    }
+    out.push_str("(\n");
+
+    for entry in entries {
+        let mut key_str = "";
+        let mut val_pair = None;
+        for ep in entry.into_inner() {
+            match ep.as_rule() {
+                Rule::object_key => key_str = ep.as_str().trim(),
+                Rule::printr_array | Rule::printr_object | Rule::printr_scalar => {
+                    val_pair = Some(ep);
+                }
+                _ => {}
+            }
+        }
+        if pretty {
+            push_indent(out, unit, depth + 1);
+        }
+        out.push_str(&format!("[{}] => ", key_str));
+        if let Some(vp) = val_pair {
+            match vp.as_rule() {
+                Rule::printr_array | Rule::printr_object => {
+                    format_printr_container(vp, pretty, unit, depth + 1, out);
+                }
+                Rule::printr_scalar => {
+                    out.push_str(vp.as_str().trim());
+                }
+                _ => {}
+            }
+        }
+        out.push('\n');
+    }
+
+    if pretty {
+        push_indent(out, unit, depth);
+    }
+    out.push(')');
+}
+
+fn format_varexport_array(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    let raw = pair.as_str().trim();
+    let is_short = raw.starts_with('[');
+    let has_semi = raw.ends_with(';') && depth == 0;
+
+    let mut entries = Vec::new();
+    for p in pair.into_inner() {
+        if p.as_rule() == Rule::varexport_entries {
+            for ep in p.into_inner() {
+                if ep.as_rule() == Rule::varexport_entry {
+                    entries.push(ep);
+                }
+            }
+        }
+    }
+
+    if entries.is_empty() {
+        out.push_str(if is_short { "[]" } else { "array ()" });
+        if has_semi {
+            out.push(';');
+        }
+        return;
+    }
+
+    out.push_str(if is_short { "[" } else if pretty { "array (" } else { "array(" });
+    if pretty {
+        out.push('\n');
+    }
+
+    let len = entries.len();
+    for (idx, entry) in entries.into_iter().enumerate() {
+        let mut key_str: Option<&str> = None;
+        let mut val_pair = None;
+        for ep in entry.into_inner() {
+            match ep.as_rule() {
+                Rule::varexport_key => key_str = Some(ep.as_str().trim()),
+                Rule::varexport_val => val_pair = Some(ep),
+                _ => {}
+            }
+        }
+
+        if pretty {
+            push_indent(out, unit, depth + 1);
+        }
+        if let Some(k) = key_str {
+            out.push_str(k);
+            out.push_str(if pretty { " => " } else { "=>" });
+        }
+        if let Some(vp) = val_pair {
+            format_varexport_val(vp, pretty, unit, depth + 1, out);
+        }
+
+        if pretty {
+            out.push_str(",\n");
+        } else if idx + 1 < len {
+            out.push(',');
+        }
+    }
+
+    if pretty {
+        push_indent(out, unit, depth);
+    }
+    out.push(if is_short { ']' } else { ')' });
+    if has_semi {
+        out.push(';');
+    }
+}
+
+fn format_varexport_object(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    let raw = pair.as_str().trim();
+    let has_semi = raw.ends_with(';') && depth == 0;
+    let mut class_name: Option<&str> = None;
+    let mut arr_pair = None;
+
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::class_name => class_name = Some(p.as_str()),
+            Rule::varexport_array => arr_pair = Some(p),
+            _ => {}
+        }
+    }
+
+    if let Some(cls) = class_name {
+        out.push_str(&format!("{}::__set_state(", cls));
+        if let Some(ap) = arr_pair {
+            format_varexport_array(ap, pretty, unit, depth, out);
+        }
+        out.push(')');
+    } else if raw.contains("__set_state") {
+        out.push_str("stdClass::__set_state(");
+        if let Some(ap) = arr_pair {
+            format_varexport_array(ap, pretty, unit, depth, out);
+        }
+        out.push(')');
+    } else {
+        out.push_str("(object) ");
+        if let Some(ap) = arr_pair {
+            format_varexport_array(ap, pretty, unit, depth, out);
+        }
+    }
+
+    if has_semi {
+        out.push(';');
+    }
+}
+
+fn format_varexport_val(
+    pair: Pair<Rule>,
+    pretty: bool,
+    unit: &str,
+    depth: usize,
+    out: &mut String,
+) {
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::varexport_array => format_varexport_array(p, pretty, unit, depth, out),
+            Rule::varexport_object => format_varexport_object(p, pretty, unit, depth, out),
+            _ => out.push_str(p.as_str().trim()),
+        }
     }
 }
 
@@ -644,5 +1073,37 @@ Array
         assert_eq!(val_short["host"], "localhost");
         assert_eq!(val_short["port"], 8080);
         assert_eq!(val_short["debug"], true);
+    }
+
+    #[test]
+    fn test_format_vardump_keeps_native_format() {
+        let input = r#"object(App\Domain\UserSession)#42 (2) { ["user_id"]=> int(90841) ["permissions":protected]=> array(2) { [0]=> string(4) "read" [1]=> string(5) "write" } }"#;
+        let pretty = format_vardump_with_indent(input, true, IndentStyle::Spaces2).unwrap();
+        assert!(pretty.starts_with("object(App\\Domain\\UserSession)#42 (2) {\n"));
+        assert!(pretty.contains("  [\"user_id\"]=>\n  int(90841)\n"));
+        assert!(pretty.contains("  [\"permissions\":protected]=>\n  array(2) {\n"));
+        assert!(pretty.contains("    [0]=>\n    string(4) \"read\"\n"));
+        assert_eq!(parse_vardump(&pretty).unwrap(), parse_vardump(input).unwrap());
+
+        let minified = format_vardump_with_indent(&pretty, false, IndentStyle::Spaces2).unwrap();
+        assert!(!minified.contains('\n'));
+        assert_eq!(parse_vardump(&minified).unwrap(), parse_vardump(input).unwrap());
+    }
+
+    #[test]
+    fn test_format_printr_and_varexport_keeps_native_format() {
+        let printr = "Array\n(\n[a] => hello\n[nested] => Array\n(\n[0] => world\n)\n)";
+        let formatted_printr = format_vardump_with_indent(printr, true, IndentStyle::Spaces4).unwrap();
+        assert!(formatted_printr.starts_with("Array\n(\n    [a] => hello\n"));
+        assert_eq!(parse_vardump(&formatted_printr).unwrap(), parse_vardump(printr).unwrap());
+
+        let raw_arr = "['host'=>'localhost','port'=>8080]";
+        let formatted_raw = format_vardump_with_indent(raw_arr, true, IndentStyle::Spaces2).unwrap();
+        assert_eq!(
+            formatted_raw,
+            "[\n  'host' => 'localhost',\n  'port' => 8080,\n]"
+        );
+        let minified_raw = format_vardump_with_indent(&formatted_raw, false, IndentStyle::Spaces2).unwrap();
+        assert_eq!(minified_raw, "['host'=>'localhost','port'=>8080]");
     }
 }

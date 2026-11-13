@@ -1,153 +1,153 @@
-# 🗺️ VarLens — Roadmap de Desarrollo y Nuevas Funcionalidades
+# 🗺️ VarLens — Development Roadmap & New Features
 
-Este documento define el plan técnico por fases para evolucionar **VarLens** hacia una suite completa de inspección, transformación y comparación de estructuras de datos para escritorio Linux (**Rust + GTK4 + Libadwaita + GtkSourceView 5**).
+This document defines the phased technical plan to evolve **VarLens** into a complete suite for inspecting, transforming, and comparing data structures on the Linux desktop (**Rust + GTK4 + Libadwaita + GtkSourceView 5**).
 
 ---
 
-## Arquitectura General Propuesta
+## Proposed High-Level Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Entrada["1. Ingesta y Formatos"]
+    subgraph Input["1. Ingestion & Formats"]
         CLI["CLI Args & stdin Pipe"]
         Clip["Clipboard Watcher"]
         Parsers["Parsers: JSON / XML / PHP var_dump, print_r, var_export, serialize() / YAML / TOML / CSV"]
     end
 
-    subgraph Core["2. Motor Core (src/core/)"]
-        AST["Modelo Unificado (serde_json::Value / XmlNode)"]
-        Decode["Smart Decoder (JSON Escapado, JWT, Base64)"]
-        Query["Motor de Consultas (JSONPath / JMESPath / XPath)"]
-        Diff["Diff Engine (Texto + Tree Diff Semántico + Hunk Merge)"]
-        Codegen["Generador de Tipos (Rust, TS, PHP DTO, Go, JSON Schema)"]
+    subgraph Core["2. Core Engine (src/core/)"]
+        AST["Unified Model (serde_json::Value / XmlNode)"]
+        Decode["Smart Decoder (Escaped JSON, JWT, Base64)"]
+        Query["Query Engine (JSONPath / JMESPath / XPath)"]
+        Diff["Diff Engine (Text + Semantic Tree Diff + Hunk Merge)"]
+        Codegen["Type Generator (Rust, TS, PHP DTO, Go, JSON Schema)"]
     end
 
-    subgraph UI["3. Interfaz Nativa (src/ui/)"]
+    subgraph UI["3. Native Interface (src/ui/)"]
         Editor["GtkSourceView 5 + Gutter Folding + Minimap Marks"]
-        Tree["Árbol Interactivo con Decodificación Inline"]
-        History["Historial Persistente y Sesiones"]
+        Tree["Interactive Tree with Inline Decoding"]
+        History["Persistent History & Sessions"]
     end
 
-    Entrada --> Core --> UI
+    Input --> Core --> UI
 ```
 
 ---
 
-## Fase 1: Nuevos Formatos y Decodificación Inteligente (Corto Plazo)
+## Phase 1: New Formats & Smart Decoding (Short Term)
 
-### 1.1 Soporte para `serialize()` de PHP y Sesiones PHP
-Muchos sistemas en producción almacenan payloads de PHP serializados en Redis, Memcached o columnas de base de datos (`a:2:{s:4:"name";s:4:"John";i:0;b:1;}`).
-- **Módulo**: `src/core/php_serialize.rs` (o extensión en `src/core/vardump/`).
-- **Alcance técnico**:
-  - Soportar tipos primitivos (`N;`, `b:0;`, `i:42;`, `d:3.14;`, `s:len:"...";`), arreglos (`a:len:{...}`), objetos (`O:len:"ClassName":len:{...}`) y objetos con `Serializable` (`C:...`).
-  - Limpiar prefijos de visibilidad de propiedades privadas/protegidas (`\0ClassName\0prop` y `\0*\0prop`).
-  - Detección automática en `detect_and_switch_tool` cuando la entrada comience con `a:`, `O:`, `s:`, `i:`, `b:` seguido del patrón de `serialize()`.
-- **Pruebas**: Tests unitarios con estructuras anidadas, caracteres multibyte UTF-8 (conteo de bytes exacto en `s:len`) y propiedades privadas.
+### 1.1 PHP `serialize()` & PHP Sessions Support
+Many production systems store serialized PHP payloads in Redis, Memcached, or database columns (`a:2:{s:4:"name";s:4:"John";i:0;b:1;}`).
+- **Module**: `src/core/php_serialize.rs` (or an extension under `src/core/vardump/`).
+- **Technical Scope**:
+  - Support primitive types (`N;`, `b:0;`, `i:42;`, `d:3.14;`, `s:len:"...";`), arrays (`a:len:{...}`), objects (`O:len:"ClassName":len:{...}`), and `Serializable` objects (`C:...`).
+  - Strip visibility prefixes from private/protected properties (`\0ClassName\0prop` and `\0*\0prop`).
+  - Auto-detection when input starts with `a:`, `O:`, `s:`, `i:`, `b:` matching the `serialize()` pattern.
+- **Tests**: Unit tests with nested structures, multibyte UTF-8 characters (exact byte length counting in `s:len`), and private properties.
 
-### 1.2 Decodificador Inteligente de Nodos Inline (Smart Unescape / JWT / Base64)
-En APIs y logs es común encontrar cadenas JSON escapadas dentro de otra cadena JSON (`"payload": "{\"id\":123}"`), tokens JWT (`eyJ...`) o bloques en Base64.
-- **Módulo**: `src/core/decoder.rs` e integración en `src/ui/json_tree.rs`.
-- **Alcance técnico**:
-  - **Detección heurística en nodos `STR`**:
-    - **JSON Escapado**: Si el string empieza por `{` o `[` y es un JSON válido al parsearse.
-    - **JWT**: Si cumple el formato `header.payload.signature` en Base64URL y los dos primeros segmentos decodifican a JSON válido.
-    - **Base64**: Si tiene longitud múltiplo de 4, alfabeto válido y decodifica a UTF-8 legible o JSON.
-  - **Interfaz en el Árbol (`JsonTreeView`)**:
-    - Mostrar badges específicos (`JSON-STR`, `JWT`, `B64`) junto al nodo.
-    - Botón en la barra del árbol para **"Expandir / Decodificar nodo inline"**, insertando el sub-árbol decodificado como hijos del nodo actual.
+### 1.2 Smart Inline Node Decoder (Smart Unescape / JWT / Base64)
+In APIs and logs it is common to find escaped JSON strings inside another JSON string (`"payload": "{\"id\":123}"`), JWT tokens (`eyJ...`), or Base64 blocks.
+- **Module**: `src/core/decoder.rs` and integration in `src/ui/json_tree.rs`.
+- **Technical Scope**:
+  - **Heuristic detection on `STR` nodes**:
+    - **Escaped JSON**: If the string starts with `{` or `[` and parses as valid JSON.
+    - **JWT**: If it matches `header.payload.signature` in Base64URL and the first two segments decode to valid JSON.
+    - **Base64**: If length is a multiple of 4, uses a valid alphabet, and decodes to readable UTF-8 or JSON.
+  - **Tree UI (`JsonTreeView`)**:
+    - Show specific badges (`JSON-STR`, `JWT`, `B64`) next to the node.
+    - Toolbar button to **"Expand / Decode node inline"**, inserting the decoded subtree as children of the current node.
 
-### 1.3 Soporte Bidireccional para YAML, TOML y CSV
-- **Módulos**: `src/core/yaml.rs`, `src/core/toml_fmt.rs`, `src/core/csv_fmt.rs`.
-- **Dependencias sugeridas**: `serde_yaml` (o `serde_yml`), `toml`, `csv`.
-- **Alcance técnico**:
-  - Conversión directa hacia/desde `serde_json::Value` para reutilizar el **Árbol Interactivo** sin duplicar componentes UI.
-  - Resaltado de sintaxis en `GtkSourceView` (`yaml`, `toml`, `csv`).
-
----
-
-## Fase 2: Consultas, Filtrado y Generación de Código (Mediano Plazo)
-
-### 2.1 Consola Interactiva de Consultas (JSONPath / JMESPath y XPath)
-- **Módulo**: `src/core/query.rs`.
-- **Dependencias sugeridas**: `serde_json_path` (RFC 9535) o `jmespath`, y evaluador XPath ligero sobre el árbol XML.
-- **Alcance técnico**:
-  - Añadir una barra de consulta colapsable en el Inspector (`$.store.book[?(@.price < 10)].title`).
-  - Evaluación en vivo (con *debounce* de 150 ms) mostrando el subconjunto resultante tanto en el editor de código como en el Árbol Interactivo.
-  - Indicador del número de nodos coincidentes y autocompletado básico de claves del nivel actual.
-
-### 2.2 Generador de Tipos y Structs (Codegen)
-Inferir el esquema del payload actual (JSON, XML o `var_dump` convertido) y generar código listo para copiar al portapapeles.
-- **Módulo**: `src/core/codegen.rs`.
-- **Formatos de salida**:
-  - **Rust**: `struct` con `#[derive(Debug, Clone, Serialize, Deserialize)]` y `#[serde(rename = "...")]` cuando aplique.
-  - **TypeScript**: `interface` / `type` con detección de campos opcionales (`?`) en arreglos de objetos heterogéneos.
-  - **PHP 8.2+**: `readonly class` DTO con tipos estrictos y PHPDoc.
-  - **Go**: `struct` con etiquetas `` `json:"..."` ``.
-  - **JSON Schema**: Borrador Draft 2020-12 inferido automáticamente.
-- **Interfaz**: Diálogo modal (`AdwDialog` / `AdwWindow`) con selector de lenguaje, vista previa en `GtkSourceView` y botón de copia rápida.
+### 1.3 Bidirectional Support for YAML, TOML, and CSV
+- **Modules**: `src/core/yaml.rs`, `src/core/toml_fmt.rs`, `src/core/csv_fmt.rs`.
+- **Suggested Dependencies**: `serde_yaml` (or `serde_yml`), `toml`, `csv`.
+- **Technical Scope**:
+  - Direct conversion to/from `serde_json::Value` to reuse the **Interactive Tree** without duplicating UI components.
+  - Syntax highlighting in `GtkSourceView` (`yaml`, `toml`, `csv`).
 
 ---
 
-## Fase 3: Evolución del Motor de Diferencias (Diff Viewer)
+## Phase 2: Querying, Filtering & Code Generation (Medium Term)
 
-### 3.1 Diff Semántico / Estructural (Tree Diff)
-Comparar dos estructuras de datos por significado en lugar de línea por línea de texto.
-- **Módulo**: `src/core/tree_diff.rs` y vista en `src/ui/json_tree.rs`.
-- **Alcance técnico**:
-  - Comparar recursivamente dos `serde_json::Value` ignorando formato, espacios y orden de claves en objetos.
-  - Clasificar cada ruta (`$.ruta.al.nodo`) como:
-    - 🟢 **Añadido** (`Added`): Clave o índice nuevo en el panel derecho.
-    - 🔴 **Eliminado** (`Removed`): Clave o índice que desapareció del panel izquierdo.
-    - 🟡 **Modificado** (`Modified`): Muestra el cambio exacto en línea (`"30"` → `"60"`).
-  - Filtro rápido para mostrar **solo nodos con cambios** en el árbol.
+### 2.1 Interactive Query Console (JSONPath / JMESPath & XPath)
+- **Module**: `src/core/query.rs`.
+- **Suggested Dependencies**: `serde_json_path` (RFC 9535) or `jmespath`, plus a lightweight XPath evaluator over the XML tree.
+- **Technical Scope**:
+  - Add a collapsible query bar in the Inspector (`$.store.book[?(@.price < 10)].title`).
+  - Live evaluation (with a 150 ms *debounce*) showing the resulting subset in both the code editor and the Interactive Tree.
+  - Matching node count indicator and basic key autocompletion for the current level.
 
-### 3.2 Fusión Parcial de Bloques (Merge Hunks `→` / `←`)
-- **Módulo**: `src/ui/diff_editor.rs` y `src/ui/window.rs`.
-- **Alcance técnico**:
-  - Añadir acciones por bloque (`hunk`) para copiar un bloque específico desde el panel **Original → Modificado** o **Modificado → Original** sin afectar el resto del documento.
-  - Soportar `Ctrl+Z` (Undo en el `sourceview5::Buffer` destino) tras aplicar un bloque.
-
-### 3.3 Marcas Visuales de Diferencias en el Minimapa y Scrollbar
-- **Módulo**: `src/ui/diff_editor.rs`.
-- **Alcance técnico**:
-  - Dibujar marcadores horizontales rojos (supresiones) y verdes (adiciones) proporcionales a la posición del archivo sobre el borde lateral de los editores de Diff para ubicar cambios en archivos de miles de líneas.
+### 2.2 Type & Struct Generator (Codegen)
+Infer the schema of the current payload (JSON, XML, or converted `var_dump`) and generate ready-to-copy code.
+- **Module**: `src/core/codegen.rs`.
+- **Output Formats**:
+  - **Rust**: `struct` with `#[derive(Debug, Clone, Serialize, Deserialize)]` and `#[serde(rename = "...")]` where applicable.
+  - **TypeScript**: `interface` / `type` with optional field (`?`) detection across heterogeneous arrays of objects.
+  - **PHP 8.2+**: `readonly class` DTO with strict types and PHPDoc.
+  - **Go**: `struct` with `` `json:"..."` `` tags.
+  - **JSON Schema**: Automatically inferred Draft 2020-12 schema.
+- **UI**: Modal dialog (`AdwDialog` / `AdwWindow`) with language selector, `GtkSourceView` preview, and quick-copy button.
 
 ---
 
-## Fase 4: Productividad y Flujo de Escritorio Linux
+## Phase 3: Diff Engine Evolution (Diff Viewer)
 
-### 4.1 Soporte Completo de Línea de Comandos (CLI) y Tuberías (`stdin`)
-Permitir usar **VarLens** directamente desde la terminal o scripts de desarrollo:
-- **Módulo**: `src/main.rs` y `src/ui/window.rs`.
-- **Casos de uso**:
-  - `varlens payload.json`: Abre directamente la herramienta correspondiente (JSON, XML o `var_dump`) con el archivo cargado.
-  - `varlens original.json nuevo.json`: Abre directamente la vista **Comparar (Diff)** y ejecuta la comparación entre ambos archivos.
-  - `php artisan tinker ... | varlens` o `curl -s https://api.ejemplo.com/data | varlens`: Lee el flujo desde `stdin` cuando no es un TTY interactivo y lo carga automáticamente en el Inspector.
+### 3.1 Semantic / Structural Diff (Tree Diff)
+Compare two data structures by meaning rather than line-by-line text.
+- **Module**: `src/core/tree_diff.rs` and view in `src/ui/json_tree.rs`.
+- **Technical Scope**:
+  - Recursively compare two `serde_json::Value` trees ignoring formatting, whitespace, and object key order.
+  - Classify each path (`$.path.to.node`) as:
+    - 🟢 **Added**: New key or index in the right panel.
+    - 🔴 **Removed**: Key or index missing from the left panel.
+    - 🟡 **Modified**: Shows the exact inline change (`"30"` → `"60"`).
+  - Quick filter to show **only changed nodes** in the tree.
 
-### 4.2 Historial Persistente de Sesiones y Pestañas
-- **Módulo**: `src/core/history.rs`.
-- **Alcance técnico**:
-  - Almacenar localmente en `glib::user_data_dir().join("varlens")` las últimas N sesiones/payloads inspeccionados (con fecha, tamaño, tipo de formato y vista previa).
-  - Restaurar opcionalmente la última sesión al abrir la aplicación.
-  - Panel o menú desplegable de **Historial Reciente** en la `AdwHeaderBar`.
+### 3.2 Partial Block Merging (Merge Hunks `→` / `←`)
+- **Module**: `src/ui/diff_editor.rs` and `src/ui/window/diff.rs`.
+- **Technical Scope**:
+  - Per-hunk actions to copy a specific block from **Original → Modified** or **Modified → Original** without affecting the rest of the document.
+  - Support `Ctrl+Z` (Undo in the target `sourceview5::Buffer`) after applying a hunk.
 
-### 4.3 Monitor Opcional de Portapapeles (Clipboard Watcher)
-- **Módulo**: `src/ui/window.rs` (`gdk::Clipboard::connect_changed`).
-- **Alcance técnico**:
-  - Interruptor opcional en la barra superior o preferencias (*"Auto-inspeccionar portapapeles"*).
-  - Cuando está activo y el usuario copia un bloque que coincide con un JSON válido, XML o salida de `var_dump()`/`print_r()`, VarLens lo carga y formatea automáticamente (mostrando una notificación sutil tipo `AdwToast` con opción de deshacer).
+### 3.3 Visual Diff Marks on Minimap & Scrollbar
+- **Module**: `src/ui/diff_editor.rs`.
+- **Technical Scope**:
+  - Draw horizontal red (deletions) and green (additions) markers proportional to file position along the side edge of the diff editors to locate changes in files with thousands of lines.
 
 ---
 
-## Resumen de Priorización Sugerida
+## Phase 4: Productivity & Linux Desktop Workflow
 
-| Prioridad | Funcionalidad | Complejidad | Impacto en UX |
+### 4.1 Full CLI & Pipe (`stdin`) Support
+Allow using **VarLens** directly from the terminal or developer scripts:
+- **Module**: `src/main.rs` and `src/ui/window/mod.rs`.
+- **Use Cases**:
+  - `varlens payload.json`: Opens directly into the matching mode (JSON, XML, or `var_dump`) with the file loaded.
+  - `varlens original.json new.json`: Opens directly into the **Comparator (Diff)** view and runs the comparison between both files.
+  - `php artisan tinker ... | varlens` or `curl -s https://api.example.com/data | varlens`: Reads from `stdin` when not an interactive TTY and loads it automatically into the Inspector.
+
+### 4.2 Persistent Session & Tab History
+- **Module**: `src/core/history.rs`.
+- **Technical Scope**:
+  - Store locally in `glib::user_data_dir().join("varlens")` the last N inspected sessions/payloads (with timestamp, size, format type, and preview).
+  - Optionally restore the last session on app startup.
+  - **Recent History** popover/panel in `AdwHeaderBar`.
+
+### 4.3 Optional Clipboard Watcher
+- **Module**: `src/ui/window/mod.rs` (`gdk::Clipboard::connect_changed`).
+- **Technical Scope**:
+  - Optional toggle in preferences or top bar (*"Auto-inspect clipboard"*).
+  - When active and the user copies text matching valid JSON, XML, or `var_dump()`/`print_r()` output, VarLens loads and formats it automatically (showing a subtle `AdwToast` notification with an undo option).
+
+---
+
+## Suggested Prioritization Summary
+
+| Priority | Feature | Complexity | UX Impact |
 | :---: | :--- | :---: | :---: |
-| **P1** | Soporte para `serialize()` de PHP | Media | Alto (Diferenciador clave en PHP) |
-| **P1** | Decodificador Inline en Árbol (JSON escapado, JWT, Base64) | Baja–Media | Muy Alto |
-| **P1** | Soporte CLI (`varlens file1 file2` y pipe `stdin`) | Baja | Alto |
-| **P2** | Consola de consultas JSONPath / XPath en vivo | Media | Muy Alto |
-| **P2** | Diff Semántico en Árbol (Tree Diff) + Merge de Hunks | Media–Alta | Alto |
-| **P3** | Generador de Tipos (Rust, TypeScript, PHP DTO, Go) | Media | Medio–Alto |
-| **P3** | Soporte YAML / TOML / CSV | Baja | Medio |
-| **P4** | Historial Persistente + Clipboard Watcher | Media | Medio |
+| **P1** | PHP `serialize()` support | Medium | High (Key PHP differentiator) |
+| **P1** | Inline Tree Decoder (escaped JSON, JWT, Base64) | Low–Medium | Very High |
+| **P1** | CLI support (`varlens file1 file2` & `stdin` pipe) | Low | High |
+| **P2** | Live JSONPath / XPath query console | Medium | Very High |
+| **P2** | Semantic Tree Diff + Merge Hunks | Medium–High | High |
+| **P3** | Type Generator (Rust, TypeScript, PHP DTO, Go) | Medium | Medium–High |
+| **P3** | YAML / TOML / CSV support | Low | Medium |
+| **P4** | Persistent History + Clipboard Watcher | Medium | Medium |

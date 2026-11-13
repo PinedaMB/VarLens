@@ -28,6 +28,7 @@ pub struct FoldingController {
     renderer_fold: sourceview5::GutterRendererText,
     regions: Rc<RefCell<Vec<FoldRegion>>>,
     folded_lines: Rc<RefCell<HashSet<usize>>>,
+    error_line: Rc<RefCell<Option<usize>>>,
 }
 
 impl FoldingController {
@@ -42,6 +43,7 @@ impl FoldingController {
 
         let regions: Rc<RefCell<Vec<FoldRegion>>> = Rc::new(RefCell::new(Vec::new()));
         let folded_lines: Rc<RefCell<HashSet<usize>>> = Rc::new(RefCell::new(HashSet::new()));
+        let error_line: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
 
         // 1. Custom Line Numbers Renderer (with ample width and vertical breathing room)
         let renderer_lines = sourceview5::GutterRendererText::new();
@@ -54,15 +56,18 @@ impl FoldingController {
 
         let reg_lines = regions.clone();
         let fold_lines = folded_lines.clone();
+        let err_lines = error_line.clone();
         let view_for_lines = view.downgrade();
         renderer_lines.connect_query_data(move |ren, _obj, line| {
             let line = line as usize;
-            let (hidden, is_fold_header) = {
+            let (hidden, is_fold_header, is_error) = {
                 let folds = fold_lines.borrow();
                 let regs = reg_lines.borrow();
+                let err = *err_lines.borrow();
                 (
                     is_line_folded_away(line, &folds, &regs),
                     folds.contains(&line),
+                    err == Some(line),
                 )
             };
 
@@ -78,7 +83,12 @@ impl FoldingController {
                     })
                     .unwrap_or(false);
 
-                if is_fold_header {
+                if is_error {
+                    ren.set_markup(&format!(
+                        "<span font_desc='Fira Code, monospace 10.5pt' weight='bold' foreground='#f66151'>{}</span>",
+                        line + 1
+                    ));
+                } else if is_fold_header {
                     ren.set_markup(&format!(
                         "<span font_desc='Fira Code, monospace 10.5pt' weight='bold' foreground='#3584e4'>{}</span>",
                         line + 1
@@ -105,8 +115,8 @@ impl FoldingController {
 
         // 2. Fold Arrows Renderer (dedicated column with hand pointer cursor and padding)
         let renderer_fold = sourceview5::GutterRendererText::new();
-        renderer_fold.set_size_request(22, -1);
-        renderer_fold.set_xpad(5);
+        renderer_fold.set_size_request(26, -1);
+        renderer_fold.set_xpad(4);
         renderer_fold.set_ypad(2);
         renderer_fold.set_xalign(0.5); // centered arrow
         renderer_fold.set_yalign(0.5);
@@ -115,13 +125,17 @@ impl FoldingController {
 
         let reg_fold = regions.clone();
         let fold_fold = folded_lines.clone();
+        let err_fold = error_line.clone();
         renderer_fold.connect_query_data(move |ren, _obj, line| {
             let line = line as usize;
             let folds = fold_fold.borrow();
             let regs = reg_fold.borrow();
+            let is_error = *err_fold.borrow() == Some(line);
 
             if is_line_folded_away(line, &folds, &regs) {
                 ren.set_text("");
+            } else if is_error {
+                ren.set_markup("<span size='large' weight='bold' foreground='#f66151'>⚠</span>");
             } else if folds.contains(&line) {
                 ren.set_markup("<span size='small' weight='bold' foreground='#3584e4'>▶</span>");
             } else if regs.iter().any(|r| r.start_line == line) {
@@ -168,10 +182,19 @@ impl FoldingController {
             renderer_fold,
             regions,
             folded_lines,
+            error_line,
         };
 
         controller.update_regions();
         controller
+    }
+
+    pub fn set_error_line(&self, line: Option<usize>) {
+        if *self.error_line.borrow() != line {
+            *self.error_line.borrow_mut() = line;
+            self.renderer_lines.queue_draw();
+            self.renderer_fold.queue_draw();
+        }
     }
 
     /// Attaches a click gesture controller that maps clicks from any gutter widget to the corresponding buffer line.

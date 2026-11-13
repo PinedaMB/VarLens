@@ -90,6 +90,24 @@ impl JsonMetrics {
     }
 }
 
+/// Formats a `serde_json::Value` either as pretty-printed (with custom indent) or minified.
+pub fn format_value_with_indent(
+    val: &Value,
+    pretty: bool,
+    indent: IndentStyle,
+) -> Result<String, String> {
+    if pretty {
+        let mut buf = Vec::new();
+        let formatter = PrettyFormatter::with_indent(indent.as_bytes());
+        let mut ser = Serializer::with_formatter(&mut buf, formatter);
+        val.serialize(&mut ser)
+            .map_err(|err| format!("Error al serializar JSON con formato: {}", err))?;
+        String::from_utf8(buf).map_err(|err| format!("Error UTF-8 al formatear JSON: {}", err))
+    } else {
+        serde_json::to_string(val).map_err(|err| format!("Error al minificar JSON: {}", err))
+    }
+}
+
 /// Formats a JSON string either as pretty-printed (with custom indent) or minified (compact).
 pub fn format_json_with_indent(
     input: &str,
@@ -110,17 +128,7 @@ pub fn format_json_with_indent(
         )
     })?;
 
-    if pretty {
-        let mut buf = Vec::new();
-        let formatter = PrettyFormatter::with_indent(indent.as_bytes());
-        let mut ser = Serializer::with_formatter(&mut buf, formatter);
-        parsed
-            .serialize(&mut ser)
-            .map_err(|err| format!("Error al serializar JSON con formato: {}", err))?;
-        String::from_utf8(buf).map_err(|err| format!("Error UTF-8 al formatear JSON: {}", err))
-    } else {
-        serde_json::to_string(&parsed).map_err(|err| format!("Error al minificar JSON: {}", err))
-    }
+    format_value_with_indent(&parsed, pretty, indent)
 }
 
 /// Formats a JSON string using default 2-space indentation when `pretty` is true.
@@ -149,21 +157,13 @@ pub fn validate_json(input: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Computes AST metrics (depth, keys, total nodes, byte size) if input is valid JSON.
-pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return Err("Vacío".to_string());
-    }
-
-    let parsed: Value = serde_json::from_str(trimmed)
-        .map_err(|err| format!("Línea {}, Col {}", err.line(), err.column()))?;
-
+/// Computes AST metrics (depth, keys, total nodes, byte size) for an already-parsed `Value`.
+pub fn analyze_value(val: &Value, size_bytes: usize) -> JsonMetrics {
     let mut metrics = JsonMetrics {
         max_depth: 0,
         total_keys: 0,
         total_nodes: 0,
-        size_bytes: input.len(),
+        size_bytes,
     };
 
     fn walk(val: &Value, current_depth: usize, m: &mut JsonMetrics) {
@@ -187,8 +187,21 @@ pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
         }
     }
 
-    walk(&parsed, 0, &mut metrics);
-    Ok(metrics)
+    walk(val, 0, &mut metrics);
+    metrics
+}
+
+/// Computes AST metrics (depth, keys, total nodes, byte size) if input is valid JSON.
+pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Vacío".to_string());
+    }
+
+    let parsed: Value = serde_json::from_str(trimmed)
+        .map_err(|err| format!("Línea {}, Col {}", err.line(), err.column()))?;
+
+    Ok(analyze_value(&parsed, input.len()))
 }
 
 /// Helper to count the number of lines in a text slice.
