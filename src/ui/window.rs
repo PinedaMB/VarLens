@@ -2,7 +2,9 @@ use crate::core::diff::{compute_diff_ext, DiffSummary};
 use crate::core::json::{
     analyze_json, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
 };
-use crate::core::vardump::{is_printr_raw, parse_vardump, vardump_to_json_string};
+use crate::core::vardump::{
+    format_vardump_with_indent, is_printr_raw, parse_vardump, vardump_to_json_string,
+};
 use crate::core::xml::{analyze_xml, format_xml_with_indent, xml_to_json_string};
 use crate::i18n::{self, Language};
 use crate::tr;
@@ -26,11 +28,19 @@ use std::time::Duration;
 
 const ASYNC_LINE_THRESHOLD: usize = 1000;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InspectorFormatMode {
+    Json,
+    Xml,
+    PhpVarDump,
+    PhpRaw,
+}
+
 enum WorkerResult {
     InspectorFormatted {
         text: String,
         message: String,
-        is_xml: bool,
+        mode: InspectorFormatMode,
     },
     DiffCalculated(DiffSummary),
     Error(String),
@@ -115,8 +125,6 @@ mod imp {
         pub lbl_diff_count: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_diff_similarity: TemplateChild<gtk4::Label>,
-        #[template_child]
-        pub lbl_detect_mode: TemplateChild<gtk4::Label>,
         #[template_child]
         pub sw_ignore_whitespace: TemplateChild<gtk4::Switch>,
         #[template_child]
@@ -209,10 +217,6 @@ mod imp {
         pub grp_pref_diff: TemplateChild<adw::PreferencesGroup>,
         #[template_child]
         pub pref_patience: TemplateChild<adw::SwitchRow>,
-
-        // Global footer
-        #[template_child]
-        pub lbl_footer_diff_badge: TemplateChild<gtk4::Label>,
 
         // Internal state & tags
         pub tag_deleted: OnceCell<gtk4::TextTag>,
@@ -776,7 +780,6 @@ impl VarDiffWindow {
         imp.btn_copy_right.set_tooltip_text(Some(tr!("Copiar código nuevo", "Copy modified code")));
         imp.btn_paste_right.set_tooltip_text(Some(tr!("Pegar del portapapeles", "Paste from clipboard")));
         imp.btn_load_right.set_tooltip_text(Some(tr!("Cargar archivo modificado", "Load modified file")));
-        imp.lbl_detect_mode.set_label(tr!("Detectar: Auto (JSON, XML, var_dump)", "Detect: Auto (JSON, XML, var_dump)"));
 
         // 4. Inspector controls
         imp.btn_paste_inspector.set_tooltip_text(Some(tr!("Pegar", "Paste")));
@@ -1310,7 +1313,6 @@ impl VarDiffWindow {
             imp.lbl_diff_similarity.set_label(&format!("100% {}", tr!("similitud", "similarity")));
             imp.lbl_diff_removals.set_label(&format!("0 {}", tr!("supresiones (-)", "deletions (-)")));
             imp.lbl_diff_additions.set_label(&format!("0 {}", tr!("adiciones (+)", "additions (+)")));
-            imp.lbl_footer_diff_badge.set_label("+0  -0");
             imp.hunk_positions.borrow_mut().clear();
             imp.last_unified_diff.borrow_mut().clear();
         });
@@ -1934,8 +1936,6 @@ impl VarDiffWindow {
             .set_label(&format!("{} {}", summary.deletions, tr!("supresiones (-)", "deletions (-)")));
         imp.lbl_diff_additions
             .set_label(&format!("{} {}", summary.insertions, tr!("adiciones (+)", "additions (+)")));
-        imp.lbl_footer_diff_badge
-            .set_label(&format!("+{}  -{}", summary.insertions, summary.deletions));
 
         imp.hunk_positions.replace(summary.hunk_positions);
         imp.last_unified_diff.replace(summary.unified_diff);
@@ -2358,7 +2358,33 @@ impl VarDiffWindow {
         }
 
         let indent = self.current_indent_style();
-        match sort_json_keys(&text, indent) {
+        let json_input = if imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<') {
+            match xml_to_json_string(&text, false) {
+                Ok(j) => j,
+                Err(err) => {
+                    imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
+                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
+                    return;
+                }
+            }
+        } else if imp.btn_mode_vardump.is_active()
+            || imp.btn_mode_raw.is_active()
+            || (serde_json::from_str::<serde_json::Value>(text.trim()).is_err()
+                && parse_vardump(&text).is_ok())
+        {
+            match vardump_to_json_string(&text, false) {
+                Ok(j) => j,
+                Err(err) => {
+                    imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
+                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
+                    return;
+                }
+            }
+        } else {
+            text
+        };
+
+        match sort_json_keys(&json_input, indent) {
             Ok(sorted) => {
                 buf.set_text(&sorted);
                 Self::set_buffer_language(&buf, "json");
@@ -2393,12 +2419,28 @@ impl VarDiffWindow {
         }
 
         let is_xml = imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<');
+        let is_php = !is_xml
+            && (imp.btn_mode_vardump.is_active()
+                || imp.btn_mode_raw.is_active()
+                || (serde_json::from_str::<serde_json::Value>(text.trim()).is_err()
+                    && parse_vardump(&text).is_ok()));
+        let php_mode = if is_printr_raw(&text) || imp.btn_mode_raw.is_active() {
+            InspectorFormatMode::PhpRaw
+        } else {
+            InspectorFormatMode::PhpVarDump
+        };
 
         let action_name = if is_xml {
             if pretty {
                 tr!("Formateando XML", "Formatting XML")
             } else {
                 tr!("Minificando XML", "Minifying XML")
+            }
+        } else if is_php {
+            if pretty {
+                tr!("Formateando PHP", "Formatting PHP")
+            } else {
+                tr!("Minificando PHP", "Minifying PHP")
             }
         } else if pretty {
             tr!("Formateando JSON", "Formatting JSON")
@@ -2427,7 +2469,22 @@ impl VarDiffWindow {
                                 tr!("XML minificado correctamente", "XML minified successfully")
                                     .to_string()
                             },
-                            is_xml: true,
+                            mode: InspectorFormatMode::Xml,
+                        },
+                        Err(e) => WorkerResult::Error(e),
+                    }
+                } else if is_php {
+                    match format_vardump_with_indent(&text, pretty, indent) {
+                        Ok(formatted) => WorkerResult::InspectorFormatted {
+                            text: formatted,
+                            message: if pretty {
+                                tr!("PHP formateado correctamente", "PHP formatted successfully")
+                                    .to_string()
+                            } else {
+                                tr!("PHP minificado correctamente", "PHP minified successfully")
+                                    .to_string()
+                            },
+                            mode: php_mode,
                         },
                         Err(e) => WorkerResult::Error(e),
                     }
@@ -2442,7 +2499,7 @@ impl VarDiffWindow {
                                 tr!("JSON minificado correctamente", "JSON minified successfully")
                                     .to_string()
                             },
-                            is_xml: false,
+                            mode: InspectorFormatMode::Json,
                         },
                         Err(e) => WorkerResult::Error(e),
                     }
@@ -2466,6 +2523,28 @@ impl VarDiffWindow {
                 }
                 Err(err) => {
                     imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
+                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
+                }
+            }
+        } else if is_php {
+            match format_vardump_with_indent(&text, pretty, indent) {
+                Ok(formatted) => {
+                    buf.set_text(&formatted);
+                    Self::set_buffer_language(&buf, "php");
+                    match php_mode {
+                        InspectorFormatMode::PhpRaw => imp.btn_mode_raw.set_active(true),
+                        _ => imp.btn_mode_vardump.set_active(true),
+                    }
+                    imp.lbl_inspector_status.set_label(if pretty {
+                        tr!("PHP formateado", "PHP formatted")
+                    } else {
+                        tr!("PHP minificado", "PHP minified")
+                    });
+                    imp.lbl_inspector_status.set_tooltip_text(None);
+                }
+                Err(err) => {
+                    imp.lbl_inspector_status
+                        .set_label(&format!("Error: {}", err));
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err));
                 }
             }
@@ -2547,7 +2626,7 @@ impl VarDiffWindow {
                     Ok(json_str) => WorkerResult::InspectorFormatted {
                         text: json_str,
                         message: format!("{} {}", mode_label, tr!("transformado exitosamente a JSON", "successfully converted to JSON")),
-                        is_xml: false,
+                        mode: InspectorFormatMode::Json,
                     },
                     Err(e) => WorkerResult::Error(e),
                 };
@@ -2580,16 +2659,27 @@ impl VarDiffWindow {
             WorkerResult::InspectorFormatted {
                 text,
                 message,
-                is_xml,
+                mode,
             } => {
                 let buf = imp.source_inspector.buffer();
                 buf.set_text(&text);
-                if is_xml {
-                    Self::set_buffer_language(&buf, "xml");
-                    imp.btn_mode_xml.set_active(true);
-                } else {
-                    Self::set_buffer_language(&buf, "json");
-                    imp.btn_mode_json.set_active(true);
+                match mode {
+                    InspectorFormatMode::Xml => {
+                        Self::set_buffer_language(&buf, "xml");
+                        imp.btn_mode_xml.set_active(true);
+                    }
+                    InspectorFormatMode::PhpVarDump => {
+                        Self::set_buffer_language(&buf, "php");
+                        imp.btn_mode_vardump.set_active(true);
+                    }
+                    InspectorFormatMode::PhpRaw => {
+                        Self::set_buffer_language(&buf, "php");
+                        imp.btn_mode_raw.set_active(true);
+                    }
+                    InspectorFormatMode::Json => {
+                        Self::set_buffer_language(&buf, "json");
+                        imp.btn_mode_json.set_active(true);
+                    }
                 }
                 imp.lbl_inspector_status.set_label(&message);
                 imp.lbl_inspector_status.set_tooltip_text(None);

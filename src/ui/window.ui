@@ -61,27 +61,6 @@
                     <property name="action-name">win.save-file</property>
                   </object>
                 </child>
-                <child>
-                  <object class="GtkSeparator">
-                    <property name="orientation">vertical</property>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkLabel">
-                    <property name="label">Varlens</property>
-                    <style>
-                      <class name="heading"/>
-                    </style>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkLabel">
-                    <property name="label">v1.1.1</property>
-                    <style>
-                      <class name="badge-pill"/>
-                    </style>
-                  </object>
-                </child>
               </object>
             </child>
 
@@ -182,26 +161,6 @@
                               </object>
                             </child>
 
-                            <!-- Badge Contador de Cambios -->
-                            <child>
-                              <object class="GtkLabel" id="lbl_diff_count">
-                                <property name="label">0 diferencias encontradas</property>
-                                <style>
-                                  <class name="badge-pill"/>
-                                </style>
-                              </object>
-                            </child>
-
-                            <!-- Badge Similitud -->
-                            <child>
-                              <object class="GtkLabel" id="lbl_diff_similarity">
-                                <property name="label">100% similar</property>
-                                <style>
-                                  <class name="badge-accent"/>
-                                </style>
-                              </object>
-                            </child>
-
                             <child>
                               <object class="GtkSeparator">
                                 <property name="orientation">vertical</property>
@@ -264,22 +223,13 @@
                               </object>
                             </child>
 
-                            <!-- Herramientas derechas: Detector & Ignorar espacios -->
+                            <!-- Herramientas derechas: Ignorar espacios -->
                             <child>
                               <object class="GtkBox">
                                 <property name="orientation">horizontal</property>
                                 <property name="spacing">12</property>
                                 <property name="hexpand">true</property>
                                 <property name="halign">end</property>
-
-                                <child>
-                                  <object class="GtkLabel" id="lbl_detect_mode">
-                                    <property name="label">Detectar: Auto (JSON, XML, var_dump)</property>
-                                    <style>
-                                      <class name="badge-pill"/>
-                                    </style>
-                                  </object>
-                                </child>
 
                                 <child>
                                   <object class="GtkBox">
@@ -522,6 +472,22 @@
                               </object>
                             </child>
                             <child>
+                              <object class="GtkLabel" id="lbl_diff_count">
+                                <property name="label">Sin diferencias</property>
+                                <style>
+                                  <class name="badge-pill"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel" id="lbl_diff_similarity">
+                                <property name="label">100% similitud</property>
+                                <style>
+                                  <class name="badge-accent"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
                               <object class="GtkSeparator">
                                 <property name="orientation">vertical</property>
                               </object>
@@ -614,21 +580,6 @@
                                 <property name="icon-name">view-sort-ascending-symbolic</property>
                                 <property name="tooltip-text" translatable="yes">Ordenar claves JSON alfabéticamente (A→Z)</property>
                                 <property name="action-name">win.sort-json-keys</property>
-                              </object>
-                            </child>
-
-                            <child>
-                              <object class="GtkSeparator">
-                                <property name="orientation">vertical</property>
-                              </object>
-                            </child>
-
-                            <child>
-                              <object class="GtkLabel" id="lbl_syntax_valid">
-                                <property name="label">Editor vacío</property>
-                                <style>
-                                  <class name="badge-pill"/>
-                                </style>
                               </object>
                             </child>
 
@@ -889,6 +840,14 @@
                               </object>
                             </child>
                             <child>
+                              <object class="GtkLabel" id="lbl_syntax_valid">
+                                <property name="label">Editor vacío</property>
+                                <style>
+                                  <class name="badge-pill"/>
+                                </style>
+                              </object>
+                            </child>
+                            <child>
                               <object class="GtkLabel" id="lbl_rfc_badge">
                                 <property name="label">Esperando entrada</property>
                                 <style>
@@ -1011,51 +970,6 @@
                   </object>
                 </child>
 
-              </object>
-            </child>
-
-            <!-- Barra Inferior Global (Footer) -->
-            <child>
-              <object class="GtkBox">
-                <property name="orientation">horizontal</property>
-                <property name="spacing">12</property>
-                <style>
-                  <class name="global-footer"/>
-                </style>
-                <child>
-                  <object class="GtkLabel">
-                    <property name="label">UTF-8   |   LF</property>
-                    <style>
-                      <class name="caption"/>
-                      <class name="dim-label"/>
-                    </style>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkBox">
-                    <property name="orientation">horizontal</property>
-                    <property name="spacing">8</property>
-                    <property name="hexpand">true</property>
-                    <property name="halign">end</property>
-                    <child>
-                      <object class="GtkLabel" id="lbl_footer_diff_badge">
-                        <property name="label">+0  -0</property>
-                        <style>
-                          <class name="badge-pill"/>
-                        </style>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="label">VarLens AST Engine</property>
-                        <style>
-                          <class name="caption"/>
-                          <class name="dim-label"/>
-                        </style>
-                      </object>
-                    </child>
-                  </object>
-                </child>
               </object>
             </child>
 

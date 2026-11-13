@@ -90,6 +90,24 @@ impl JsonMetrics {
     }
 }
 
+/// Formats a `serde_json::Value` either as pretty-printed (with custom indent) or minified.
+pub fn format_value_with_indent(
+    val: &Value,
+    pretty: bool,
+    indent: IndentStyle,
+) -> Result<String, String> {
+    if pretty {
+        let mut buf = Vec::new();
+        let formatter = PrettyFormatter::with_indent(indent.as_bytes());
+        let mut ser = Serializer::with_formatter(&mut buf, formatter);
+        val.serialize(&mut ser)
+            .map_err(|err| format!("Error al serializar JSON con formato: {}", err))?;
+        String::from_utf8(buf).map_err(|err| format!("Error UTF-8 al formatear JSON: {}", err))
+    } else {
+        serde_json::to_string(val).map_err(|err| format!("Error al minificar JSON: {}", err))
+    }
+}
+
 /// Formats a JSON string either as pretty-printed (with custom indent) or minified (compact).
 pub fn format_json_with_indent(
     input: &str,
@@ -110,17 +128,7 @@ pub fn format_json_with_indent(
         )
     })?;
 
-    if pretty {
-        let mut buf = Vec::new();
-        let formatter = PrettyFormatter::with_indent(indent.as_bytes());
-        let mut ser = Serializer::with_formatter(&mut buf, formatter);
-        parsed
-            .serialize(&mut ser)
-            .map_err(|err| format!("Error al serializar JSON con formato: {}", err))?;
-        String::from_utf8(buf).map_err(|err| format!("Error UTF-8 al formatear JSON: {}", err))
-    } else {
-        serde_json::to_string(&parsed).map_err(|err| format!("Error al minificar JSON: {}", err))
-    }
+    format_value_with_indent(&parsed, pretty, indent)
 }
 
 /// Formats a JSON string using default 2-space indentation when `pretty` is true.
