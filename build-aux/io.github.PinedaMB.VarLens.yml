@@ -31,8 +31,8 @@ modules:
     sources:
       - type: git
         url: https://github.com/PinedaMB/VarLens.git
-        tag: v1.1.1
-        commit: 063a8f242f4b5f72c5d596fe05083c9b67ad1d47
+        tag: v1.2.0
+        commit: 244a1c379837049e6b2169331aaae621a89b71ff
         x-checker-data:
           type: git
           tag-pattern: ^v([0-9.]+)$
