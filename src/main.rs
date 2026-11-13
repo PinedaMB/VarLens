@@ -7,6 +7,9 @@ use gtk4::glib;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
+use std::cell::RefCell;
+use std::io::{IsTerminal, Read};
+use std::rc::Rc;
 use ui::window::VarDiffWindow;
 
 const APP_ID: &str = "io.github.PinedaMB.VarLens";
@@ -40,8 +43,22 @@ fn main() -> glib::ExitCode {
         scheme_mgr.append_search_path(path_str);
     }
 
+    let stdin_data: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(
+        if std::env::args_os().len() <= 1 && !std::io::stdin().is_terminal() {
+            let mut buf = String::new();
+            if std::io::stdin().read_to_string(&mut buf).is_ok() && !buf.trim().is_empty() {
+                Some(buf)
+            } else {
+                None
+            }
+        } else {
+            None
+        },
+    ));
+
     let app = adw::Application::builder()
         .application_id(APP_ID)
+        .flags(gio::ApplicationFlags::HANDLES_OPEN)
         .build();
 
     app.connect_startup(|app| {
@@ -93,8 +110,22 @@ fn main() -> glib::ExitCode {
         app.add_action(&act_about);
     });
 
-    app.connect_activate(|app| {
+    let stdin_act = stdin_data.clone();
+    app.connect_activate(move |app| {
         let window = VarDiffWindow::new(app);
+        if let Some(text) = stdin_act.borrow_mut().take() {
+            window.load_inspector_text(&text, "stdin");
+        }
+        window.present();
+    });
+
+    app.connect_open(|app, files, _| {
+        let window = VarDiffWindow::new(app);
+        if files.len() >= 2 {
+            window.open_diff_files(&files[0], &files[1]);
+        } else if let Some(file) = files.first() {
+            window.open_inspector_file(file);
+        }
         window.present();
     });
 

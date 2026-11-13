@@ -214,7 +214,7 @@ impl VarDiffWindow {
                     imp.btn_mode_xml.set_active(true);
                     return;
                 }
-                if parse_vardump(&text).is_ok() {
+                if crate::core::php_serialize::is_php_serialized(&text) || parse_vardump(&text).is_ok() {
                     Self::set_buffer_language(&buf, "php");
                     if is_printr_raw(&text) {
                         imp.btn_mode_raw.set_active(true);

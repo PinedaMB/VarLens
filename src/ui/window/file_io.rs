@@ -139,6 +139,50 @@ impl VarDiffWindow {
         );
     }
 
+    pub fn load_inspector_text(&self, text: &str, source_name: &str) {
+        let imp = self.imp();
+        imp.main_stack.set_visible_child_name("inspector_page");
+        let buf = imp.source_inspector.buffer();
+        let trimmed = text.trim_start();
+        if source_name.ends_with(".xml") || trimmed.starts_with('<') {
+            Self::set_buffer_language(&buf, "xml");
+            imp.btn_mode_xml.set_active(true);
+        } else if source_name.ends_with(".php")
+            || crate::core::php_serialize::is_php_serialized(trimmed)
+            || (serde_json::from_str::<serde_json::Value>(trimmed).is_err()
+                && parse_vardump(trimmed).is_ok())
+        {
+            Self::set_buffer_language(&buf, "php");
+            if is_printr_raw(trimmed) {
+                imp.btn_mode_raw.set_active(true);
+            } else {
+                imp.btn_mode_vardump.set_active(true);
+            }
+        } else {
+            Self::set_buffer_language(&buf, "json");
+            imp.btn_mode_json.set_active(true);
+        }
+        buf.set_text(text);
+        imp.lbl_inspector_file.set_label(source_name);
+        imp.lbl_inspector_status.set_label(&format!(
+            "{}: {} {}",
+            tr!("Cargado", "Loaded"),
+            count_lines(text),
+            tr!("líneas", "lines")
+        ));
+    }
+
+    pub fn open_inspector_file(&self, file: &gio::File) {
+        self.imp().main_stack.set_visible_child_name("inspector_page");
+        self.load_gio_file(file, FileTarget::Active);
+    }
+
+    pub fn open_diff_files(&self, left: &gio::File, right: &gio::File) {
+        self.imp().main_stack.set_visible_child_name("diff_page");
+        self.load_gio_file(left, FileTarget::DiffLeft);
+        self.load_gio_file(right, FileTarget::DiffRight);
+    }
+
     pub(super) fn load_gio_file(&self, file: &gio::File, target: FileTarget) {
         let filename = file
             .basename()

@@ -432,11 +432,15 @@ fn parse_varexport_key(pair: Pair<Rule>) -> (Option<i64>, String) {
     }
 }
 
-/// Parses a PHP `var_dump()` or `print_r()` output string into a `serde_json::Value`.
+/// Parses a PHP `var_dump()`, `print_r()`, `var_export`, or `serialize()` output string into a `serde_json::Value`.
 pub fn parse_vardump(input: &str) -> Result<Value, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err("El contenido de var_dump está vacío.".to_string());
+    }
+
+    if crate::core::php_serialize::is_php_serialized(trimmed) {
+        return crate::core::php_serialize::parse_php_serialized(trimmed);
     }
 
     let mut pairs = VarDumpParser::parse(Rule::root, trimmed)
@@ -497,6 +501,11 @@ pub fn format_vardump_with_indent(
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err("El contenido de var_dump está vacío.".to_string());
+    }
+
+    if crate::core::php_serialize::is_php_serialized(trimmed) {
+        crate::core::php_serialize::parse_php_serialized(trimmed)?;
+        return Ok(trimmed.to_string());
     }
 
     let mut pairs = VarDumpParser::parse(Rule::root, trimmed)

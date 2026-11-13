@@ -28,6 +28,7 @@ mod imp_node {
         pub access_path: RefCell<String>,
         pub raw_value: RefCell<String>,
         pub json_value: RefCell<String>,
+        pub decoded_kind: RefCell<Option<crate::core::decoder::DecodedKind>>,
         pub children: RefCell<Option<gio::ListStore>>,
     }
 
@@ -117,6 +118,40 @@ impl JsonNodeObject {
                 *imp.node_type.borrow_mut() = Some(JsonNodeType::String(s.clone()));
                 *imp.raw_value.borrow_mut() = s.clone();
                 *imp.json_value.borrow_mut() = s.clone();
+                if let Some(decoded) = crate::core::decoder::detect_and_decode_str(s) {
+                    *imp.decoded_kind.borrow_mut() = Some(decoded.kind);
+                    let store = gio::ListStore::new::<JsonNodeObject>();
+                    let sub_path = if path.is_empty() {
+                        decoded.kind.badge_label().to_string()
+                    } else {
+                        format!("{} ▶ {}", path, decoded.kind.badge_label())
+                    };
+                    match &decoded.value {
+                        serde_json::Value::Object(map) => {
+                            for (k, v) in map {
+                                let cp = format!("{} ▶ {}", sub_path, k);
+                                let ca = format_child_access_path(access_path, k);
+                                store.append(&JsonNodeObject::new(k, v, &cp, &ca));
+                            }
+                        }
+                        serde_json::Value::Array(arr) => {
+                            for (i, v) in arr.iter().enumerate() {
+                                let cp = format!("{} ▶ {}", sub_path, i);
+                                let ca = format!("{}[{}]", access_path, i);
+                                store.append(&JsonNodeObject::new(&i.to_string(), v, &cp, &ca));
+                            }
+                        }
+                        other => {
+                            store.append(&JsonNodeObject::new(
+                                "decoded",
+                                other,
+                                &sub_path,
+                                access_path,
+                            ));
+                        }
+                    }
+                    *imp.children.borrow_mut() = Some(store);
+                }
             }
             serde_json::Value::Number(n) => {
                 let s = n.to_string();
@@ -204,7 +239,12 @@ impl JsonNodeObject {
             }
             Some(JsonNodeType::String(s)) => {
                 let val_escaped = glib::markup_escape_text(s);
-                if s.starts_with("http://") || s.starts_with("https://") {
+                if let Some(kind) = *imp.decoded_kind.borrow() {
+                    format!(
+                        "<span background='{}' foreground='#e5a50a' size='x-small' weight='bold'> {} </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><span foreground='{}'>\"{}\"</span>",
+                        badge_bg, kind.badge_label(), key_col, key_escaped, dim_col, str_col, val_escaped
+                    )
+                } else if s.starts_with("http://") || s.starts_with("https://") {
                     format!(
                         "<span background='{}' foreground='#3584e4' size='x-small' weight='bold'> URL </span> <b><span foreground='{}'>{}</span></b><span foreground='{}'>: </span><span foreground='#3584e4' underline='single'>\"{}\"</span>",
                         badge_bg, key_col, key_escaped, dim_col, val_escaped

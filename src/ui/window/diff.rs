@@ -313,6 +313,11 @@ impl VarDiffWindow {
         if trimmed.starts_with('<') {
             return "XML";
         }
+        if crate::core::php_serialize::is_php_serialized(trimmed)
+            && parse_vardump(trimmed).is_ok()
+        {
+            return "PHP serialize()";
+        }
         if parse_vardump(trimmed).is_ok() {
             if is_printr_raw(trimmed) {
                 return "Array raw";
