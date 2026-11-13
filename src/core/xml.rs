@@ -145,7 +145,7 @@ pub fn tokenize_xml(input: &str) -> Result<Vec<(XmlToken, usize, usize)>, String
                     } else {
                         let mut decl = String::new();
                         let mut depth = 1;
-                        while let Some((_, c)) = chars.next() {
+                        for (_, c) in chars.by_ref() {
                             advance_pos(c, &mut line, &mut col);
                             if c == '<' {
                                 depth += 1;
@@ -165,7 +165,7 @@ pub fn tokenize_xml(input: &str) -> Result<Vec<(XmlToken, usize, usize)>, String
                     advance_pos('/', &mut line, &mut col);
 
                     let mut name = String::new();
-                    while let Some((_, c)) = chars.next() {
+                    for (_, c) in chars.by_ref() {
                         advance_pos(c, &mut line, &mut col);
                         if c == '>' {
                             break;
@@ -185,7 +185,7 @@ pub fn tokenize_xml(input: &str) -> Result<Vec<(XmlToken, usize, usize)>, String
                     let mut in_quote: Option<char> = None;
                     let mut closed = false;
 
-                    while let Some((_, c)) = chars.next() {
+                    for (_, c) in chars.by_ref() {
                         advance_pos(c, &mut line, &mut col);
                         if let Some(q) = in_quote {
                             if c == q {
@@ -283,7 +283,7 @@ fn parse_tag_attributes(body: &str, line: usize, col: usize) -> Result<(String, 
                 chars.next();
                 let q = quote.unwrap();
                 let mut val = String::new();
-                while let Some(c) = chars.next() {
+                for c in chars.by_ref() {
                     if c == q { break; }
                     val.push(c);
                 }

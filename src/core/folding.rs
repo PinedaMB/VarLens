@@ -123,7 +123,7 @@ pub fn find_fold_regions(text: &str) -> Vec<FoldRegion> {
         if ch == '<' && chars.peek() == Some(&'/') {
             chars.next(); // consume '/'
             let mut tag_name = String::new();
-            while let Some(c) = chars.next() {
+            for c in chars.by_ref() {
                 if c == '\n' { current_line += 1; }
                 if c == '>' { break; }
                 if !c.is_whitespace() { tag_name.push(c); }
@@ -141,7 +141,7 @@ pub fn find_fold_regions(text: &str) -> Vec<FoldRegion> {
         }
 
         // Check for XML opening tag <tag ... > or <tag ... />
-        if ch == '<' && chars.peek().map_or(false, |c| c.is_alphabetic() || *c == '_' || *c == ':') {
+        if ch == '<' && chars.peek().is_some_and(|c| c.is_alphabetic() || *c == '_' || *c == ':') {
             let mut tag_name = String::new();
             let mut is_self_closing = false;
             let mut in_attr_quote: Option<char> = None;
@@ -158,7 +158,7 @@ pub fn find_fold_regions(text: &str) -> Vec<FoldRegion> {
 
             // Read the rest of the tag until '>'
             let mut last_char = ' ';
-            while let Some(c) = chars.next() {
+            for c in chars.by_ref() {
                 if c == '\n' { current_line += 1; }
                 if let Some(q) = in_attr_quote {
                     if c == q { in_attr_quote = None; }
