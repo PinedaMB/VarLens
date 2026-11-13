@@ -167,16 +167,12 @@
                               </object>
                             </child>
 
-                            <!-- Acción primaria: Comparar -->
+                            <!-- Recalcular diferencias -->
                             <child>
                               <object class="GtkButton" id="btn_run_diff">
-                                <property name="label" translatable="yes">Comparar</property>
                                 <property name="icon-name">view-refresh-symbolic</property>
                                 <property name="tooltip-text" translatable="yes">Recalcular diferencias</property>
                                 <property name="action-name">win.compute-diff</property>
-                                <style>
-                                  <class name="suggested-action"/>
-                                </style>
                               </object>
                             </child>
 
@@ -842,14 +838,6 @@
                             <child>
                               <object class="GtkLabel" id="lbl_syntax_valid">
                                 <property name="label">Editor vacío</property>
-                                <style>
-                                  <class name="badge-pill"/>
-                                </style>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="lbl_rfc_badge">
-                                <property name="label">Esperando entrada</property>
                                 <style>
                                   <class name="badge-pill"/>
                                 </style>

@@ -157,21 +157,13 @@ pub fn validate_json(input: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Computes AST metrics (depth, keys, total nodes, byte size) if input is valid JSON.
-pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return Err("Vacío".to_string());
-    }
-
-    let parsed: Value = serde_json::from_str(trimmed)
-        .map_err(|err| format!("Línea {}, Col {}", err.line(), err.column()))?;
-
+/// Computes AST metrics (depth, keys, total nodes, byte size) for an already-parsed `Value`.
+pub fn analyze_value(val: &Value, size_bytes: usize) -> JsonMetrics {
     let mut metrics = JsonMetrics {
         max_depth: 0,
         total_keys: 0,
         total_nodes: 0,
-        size_bytes: input.len(),
+        size_bytes,
     };
 
     fn walk(val: &Value, current_depth: usize, m: &mut JsonMetrics) {
@@ -195,8 +187,21 @@ pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
         }
     }
 
-    walk(&parsed, 0, &mut metrics);
-    Ok(metrics)
+    walk(val, 0, &mut metrics);
+    metrics
+}
+
+/// Computes AST metrics (depth, keys, total nodes, byte size) if input is valid JSON.
+pub fn analyze_json(input: &str) -> Result<JsonMetrics, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Vacío".to_string());
+    }
+
+    let parsed: Value = serde_json::from_str(trimmed)
+        .map_err(|err| format!("Línea {}, Col {}", err.line(), err.column()))?;
+
+    Ok(analyze_value(&parsed, input.len()))
 }
 
 /// Helper to count the number of lines in a text slice.

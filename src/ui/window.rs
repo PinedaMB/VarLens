@@ -1,6 +1,6 @@
 use crate::core::diff::{compute_diff_ext, DiffSummary};
 use crate::core::json::{
-    analyze_json, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
+    analyze_json, analyze_value, count_lines, format_json_with_indent, sort_json_keys, IndentStyle,
 };
 use crate::core::vardump::{
     format_vardump_with_indent, is_printr_raw, parse_vardump, vardump_to_json_string,
@@ -189,8 +189,6 @@ mod imp {
         pub lbl_payload_size: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_tree_stats: TemplateChild<gtk4::Label>,
-        #[template_child]
-        pub lbl_rfc_badge: TemplateChild<gtk4::Label>,
         #[template_child]
         pub lbl_inspector_status: TemplateChild<gtk4::Label>,
         #[template_child]
@@ -1406,6 +1404,8 @@ impl VarDiffWindow {
 
         if text.trim().is_empty() {
             imp.lbl_syntax_valid.set_label(tr!("Listo", "Ready"));
+            imp.lbl_syntax_valid.remove_css_class("badge-error");
+            imp.lbl_syntax_valid.remove_css_class("badge-success");
             imp.lbl_node_count.set_label(&format!("0 {}", tr!("nodos", "nodes")));
             imp.lbl_payload_size.set_label("0 B");
             imp.lbl_tree_stats.set_label(&format!(
@@ -1419,6 +1419,7 @@ impl VarDiffWindow {
             imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
             imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
             imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir a JSON", "Convert to JSON")));
+            imp.btn_sort_keys.set_sensitive(true);
             return;
         }
 
@@ -1426,6 +1427,7 @@ impl VarDiffWindow {
             imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear XML (Ctrl+Shift+F)", "Format XML (Ctrl+Shift+F)")));
             imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar XML", "Minify XML")));
             imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir XML → JSON", "Convert XML → JSON")));
+            imp.btn_sort_keys.set_sensitive(false);
 
             match analyze_xml(&text) {
                 Ok(metrics) => {
@@ -1437,10 +1439,6 @@ impl VarDiffWindow {
                     imp.lbl_syntax_valid.set_label(tr!("✓ XML Válido", "✓ Valid XML"));
                     imp.lbl_syntax_valid.remove_css_class("badge-error");
                     imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                    imp.lbl_rfc_badge.set_label(tr!("Válido W3C XML", "W3C XML Valid"));
-                    imp.lbl_rfc_badge.remove_css_class("badge-error");
-                    imp.lbl_rfc_badge.add_css_class("badge-success");
 
                     imp.lbl_node_count
                         .set_label(&format!("{} {}", metrics.total_elements, tr!("elementos", "elements")));
@@ -1459,10 +1457,6 @@ impl VarDiffWindow {
                     imp.lbl_syntax_valid.remove_css_class("badge-success");
                     imp.lbl_syntax_valid.add_css_class("badge-error");
 
-                    imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                    imp.lbl_rfc_badge.remove_css_class("badge-success");
-                    imp.lbl_rfc_badge.add_css_class("badge-error");
-
                     imp.lbl_inspector_status.set_label(&err_msg);
                     imp.lbl_inspector_status.set_tooltip_text(Some(&err_msg));
                 }
@@ -1477,30 +1471,29 @@ impl VarDiffWindow {
             imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
             imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
             imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir Array raw → JSON", "Convert Array raw → JSON")));
+            imp.btn_sort_keys.set_sensitive(false);
 
-            if parse_vardump(&text).is_ok() {
+            if let Ok(val) = parse_vardump(&text) {
+                let metrics = analyze_value(&val, text.len());
                 imp.lbl_syntax_valid.set_label(tr!("✓ Array raw Válido", "✓ Valid Array raw"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                imp.lbl_rfc_badge.set_label(tr!("print_r PHP Listo", "PHP print_r Ready"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                let kb = text.len() as f64 / 1024.0;
-                imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label(tr!(
-                    "Estructura PHP print_r / Array raw detectada",
-                    "PHP print_r / Array raw structure detected"
+                imp.lbl_node_count
+                    .set_label(&format!("{} {}", metrics.total_nodes, tr!("nodos", "nodes")));
+                imp.lbl_payload_size.set_label(&metrics.formatted_size());
+                imp.lbl_tree_stats.set_label(&format!(
+                    "{}: {} {} | {} {}",
+                    tr!("Árbol PHP", "PHP Tree"),
+                    metrics.max_depth,
+                    tr!("niveles", "levels"),
+                    metrics.total_keys,
+                    tr!("claves", "keys")
                 ));
             } else {
                 imp.lbl_syntax_valid.set_label(tr!("✗ Array raw Inválido", "✗ Invalid Array raw"));
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
             }
             if imp.btn_insp_view_tree.is_active() {
                 self.refresh_tree_view();
@@ -1512,30 +1505,29 @@ impl VarDiffWindow {
             imp.btn_format_json.set_tooltip_text(Some(tr!("Formatear (Ctrl+Shift+F)", "Format (Ctrl+Shift+F)")));
             imp.btn_minify_json.set_tooltip_text(Some(tr!("Minificar", "Minify")));
             imp.btn_vardump_to_json.set_tooltip_text(Some(tr!("Convertir var_dump → JSON", "Convert var_dump → JSON")));
+            imp.btn_sort_keys.set_sensitive(false);
 
-            if parse_vardump(&text).is_ok() {
+            if let Ok(val) = parse_vardump(&text) {
+                let metrics = analyze_value(&val, text.len());
                 imp.lbl_syntax_valid.set_label(tr!("✓ var_dump Válido", "✓ Valid var_dump"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
 
-                imp.lbl_rfc_badge.set_label(tr!("AST PHP Listo", "PHP AST Ready"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
-
-                let kb = text.len() as f64 / 1024.0;
-                imp.lbl_payload_size.set_label(&format!("{:.1} KB", kb));
-                imp.lbl_tree_stats.set_label(tr!(
-                    "Estructura PHP var_dump detectada",
-                    "PHP var_dump structure detected"
+                imp.lbl_node_count
+                    .set_label(&format!("{} {}", metrics.total_nodes, tr!("nodos", "nodes")));
+                imp.lbl_payload_size.set_label(&metrics.formatted_size());
+                imp.lbl_tree_stats.set_label(&format!(
+                    "{}: {} {} | {} {}",
+                    tr!("Árbol PHP", "PHP Tree"),
+                    metrics.max_depth,
+                    tr!("niveles", "levels"),
+                    metrics.total_keys,
+                    tr!("claves", "keys")
                 ));
             } else {
                 imp.lbl_syntax_valid.set_label(tr!("✗ var_dump Inválido", "✗ Invalid var_dump"));
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
-
-                imp.lbl_rfc_badge.set_label(tr!("Error sintáctico", "Syntax error"));
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
             }
             if imp.btn_insp_view_tree.is_active() {
                 self.refresh_tree_view();
@@ -1543,6 +1535,7 @@ impl VarDiffWindow {
             return;
         }
 
+        imp.btn_sort_keys.set_sensitive(true);
         match analyze_json(&text) {
             Ok(metrics) => {
                 if imp.lbl_inspector_status.label().as_str().starts_with("Error:") {
@@ -1557,10 +1550,6 @@ impl VarDiffWindow {
                 imp.lbl_syntax_valid.set_label(tr!("✓ Sintaxis Válida", "✓ Valid Syntax"));
                 imp.lbl_syntax_valid.remove_css_class("badge-error");
                 imp.lbl_syntax_valid.add_css_class("badge-success");
-
-                imp.lbl_rfc_badge.set_label(tr!("Válido RFC 8259", "RFC 8259 Valid"));
-                imp.lbl_rfc_badge.remove_css_class("badge-error");
-                imp.lbl_rfc_badge.add_css_class("badge-success");
 
                 imp.lbl_node_count
                     .set_label(&format!("{} {}", metrics.total_nodes, tr!("nodos", "nodes")));
@@ -1595,9 +1584,7 @@ impl VarDiffWindow {
                 imp.lbl_syntax_valid.remove_css_class("badge-success");
                 imp.lbl_syntax_valid.add_css_class("badge-error");
 
-                imp.lbl_rfc_badge.set_label(&err_loc);
-                imp.lbl_rfc_badge.remove_css_class("badge-success");
-                imp.lbl_rfc_badge.add_css_class("badge-error");
+                imp.lbl_inspector_status.set_label(&err_loc);
             }
         }
 
@@ -1936,6 +1923,32 @@ impl VarDiffWindow {
             .set_label(&format!("{} {}", summary.deletions, tr!("supresiones (-)", "deletions (-)")));
         imp.lbl_diff_additions
             .set_label(&format!("{} {}", summary.insertions, tr!("adiciones (+)", "additions (+)")));
+
+        let left_txt = left_buf
+            .text(&left_buf.start_iter(), &left_buf.end_iter(), true)
+            .to_string();
+        let right_txt = right_buf
+            .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
+            .to_string();
+        let fmt_label = match (left_txt.trim().is_empty(), right_txt.trim().is_empty()) {
+            (true, true) => tr!("Texto", "Text").to_string(),
+            (false, true) => Self::detect_payload_format(&left_txt).to_string(),
+            (true, false) => Self::detect_payload_format(&right_txt).to_string(),
+            (false, false) => {
+                let fl = Self::detect_payload_format(&left_txt);
+                let fr = Self::detect_payload_format(&right_txt);
+                if fl == fr {
+                    fl.to_string()
+                } else {
+                    format!("{} / {}", fl, fr)
+                }
+            }
+        };
+        imp.lbl_diff_encoding.set_label(&format!(
+            "UTF-8  •  {}  •  {}",
+            fmt_label,
+            self.current_indent_style().label()
+        ));
 
         imp.hunk_positions.replace(summary.hunk_positions);
         imp.last_unified_diff.replace(summary.unified_diff);
@@ -2301,6 +2314,26 @@ impl VarDiffWindow {
         });
     }
 
+    fn detect_payload_format(text: &str) -> &'static str {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return "Texto";
+        }
+        if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+            return "JSON";
+        }
+        if trimmed.starts_with('<') {
+            return "XML";
+        }
+        if parse_vardump(trimmed).is_ok() {
+            if is_printr_raw(trimmed) {
+                return "Array raw";
+            }
+            return "PHP var_dump";
+        }
+        "Texto"
+    }
+
     fn normalize_single_payload(text: &str, indent: IndentStyle) -> Option<String> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -2314,11 +2347,8 @@ impl VarDiffWindow {
                 return Some(fmt_xml);
             }
         }
-        if let Ok(vd_json) = vardump_to_json_string(trimmed, true) {
-            if let Ok(sorted) = sort_json_keys(&vd_json, indent) {
-                return Some(sorted);
-            }
-            return Some(vd_json);
+        if let Ok(fmt_php) = format_vardump_with_indent(trimmed, true, indent) {
+            return Some(fmt_php);
         }
         None
     }
@@ -2336,13 +2366,33 @@ impl VarDiffWindow {
             .text(&right_buf.start_iter(), &right_buf.end_iter(), true)
             .to_string();
 
-        if let Some(norm_l) = Self::normalize_single_payload(&left_text, indent) {
-            left_buf.set_text(&norm_l);
+        let mut had_error = false;
+        if !left_text.trim().is_empty() {
+            if let Some(norm_l) = Self::normalize_single_payload(&left_text, indent) {
+                left_buf.set_text(&norm_l);
+            } else {
+                had_error = true;
+            }
         }
-        if let Some(norm_r) = Self::normalize_single_payload(&right_text, indent) {
-            right_buf.set_text(&norm_r);
+        if !right_text.trim().is_empty() {
+            if let Some(norm_r) = Self::normalize_single_payload(&right_text, indent) {
+                right_buf.set_text(&norm_r);
+            } else {
+                had_error = true;
+            }
         }
         self.handle_compute_diff();
+        if had_error {
+            imp.lbl_diff_sync.set_label(tr!(
+                "⚠ Error de sintaxis al normalizar uno de los paneles",
+                "⚠ Syntax error normalizing one of the panels"
+            ));
+        } else {
+            imp.lbl_diff_sync.set_label(tr!(
+                "✓ Paneles normalizados",
+                "✓ Panels normalized"
+            ));
+        }
     }
 
     fn handle_sort_json_keys(&self) {
@@ -2357,34 +2407,19 @@ impl VarDiffWindow {
             return;
         }
 
-        let indent = self.current_indent_style();
-        let json_input = if imp.btn_mode_xml.is_active() || text.trim_start().starts_with('<') {
-            match xml_to_json_string(&text, false) {
-                Ok(j) => j,
-                Err(err) => {
-                    imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                    return;
-                }
-            }
-        } else if imp.btn_mode_vardump.is_active()
+        if imp.btn_mode_xml.is_active()
+            || imp.btn_mode_vardump.is_active()
             || imp.btn_mode_raw.is_active()
-            || (serde_json::from_str::<serde_json::Value>(text.trim()).is_err()
-                && parse_vardump(&text).is_ok())
         {
-            match vardump_to_json_string(&text, false) {
-                Ok(j) => j,
-                Err(err) => {
-                    imp.lbl_inspector_status.set_label(&format!("Error: {}", err));
-                    imp.lbl_inspector_status.set_tooltip_text(Some(&err));
-                    return;
-                }
-            }
-        } else {
-            text
-        };
+            imp.lbl_inspector_status.set_label(tr!(
+                "Ordenar claves solo está disponible en modo JSON",
+                "Sort keys is only available in JSON mode"
+            ));
+            return;
+        }
 
-        match sort_json_keys(&json_input, indent) {
+        let indent = self.current_indent_style();
+        match sort_json_keys(&text, indent) {
             Ok(sorted) => {
                 buf.set_text(&sorted);
                 Self::set_buffer_language(&buf, "json");
