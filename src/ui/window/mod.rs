@@ -633,12 +633,15 @@ impl VarDiffWindow {
 
         // Language preference change signal
         let win_p_lang = self.clone();
-        imp.pref_language.set_selected(i18n::current_language().as_u8() as u32);
+        imp.pref_language.set_selected(i18n::saved_preference_index());
         imp.pref_language.connect_selected_notify(move |row| {
-            let sel = row.selected();
-            let new_lang = Language::from_u8(sel as u8);
-            if new_lang != i18n::current_language() {
-                i18n::set_language(new_lang);
+            let prev_lang = i18n::current_language();
+            match row.selected() {
+                0 => i18n::set_language_auto(),
+                1 => i18n::set_language(Language::Spanish),
+                _ => i18n::set_language(Language::English),
+            }
+            if i18n::current_language() != prev_lang {
                 win_p_lang.update_ui_texts();
             }
         });

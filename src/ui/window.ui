@@ -901,6 +901,7 @@
                                 <property name="model">
                                   <object class="GtkStringList">
                                     <items>
+                                      <item translatable="yes">Automático (Sistema)</item>
                                       <item>Español</item>
                                       <item>English</item>
                                     </items>
